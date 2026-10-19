@@ -28,3 +28,4 @@ test('marketing and self mail are not tickets',()=>{
  assert.equal(looksLikePurchase(m('הזמנה חדשה','Planet <noreply@planetcinema.co.il>')),true);
  assert.equal(cleanTitle('סינמטק ירושלים - אישור הזמנה'),'סינמטק ירושלים');
  assert.equal(cleanTitle('אישור רכישה - FRIENDS רשת מועדוני תרבות (מס״ד: 1571809 הזמנה: 55'),'FRIENDS רשת מועדוני תרבות');});
+test('lectures at a cinematheque are lectures',()=>{assert.equal(guessKind('סינמטק ירושלים - הרצאה: היסטוריה של האנימה'),'lecture');assert.equal(guessKind('סינמטק תל אביב - מפגש עם הבמאי'),'lecture');assert.equal(guessKind('סינמטק תל אביב - פרפקט דייז'),'movie');});

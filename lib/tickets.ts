@@ -2,7 +2,7 @@
 // Gemini reads the mail when a key is set (stores word things very differently); the rules below are the fallback and the guard.
 import {gemini} from '@/lib/gemini';
 import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
-export type Kind='concert'|'show'|'movie'|'sport'|'festival'|'standup'|'other';
+export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'other';
 export type TFile={msg:string;id:string;name:string;type:string;size:number};
 export type Ticket={key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
  seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean};
@@ -37,7 +37,9 @@ export function seatsIn(text:string){const out:string[]=[];
 const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?(?:הזמנה|רכישה)|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
 export function cleanTitle(s:string){let t=s.replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
 export function guessKind(t:string):Kind{
- if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|פלאנט|planet/i.test(t))return 'movie';
+ // Cinematheques also host talks: a lecture is a lecture even when it is at a cinema.
+ if(/הרצא|מרצה|lecture|talk\b|שיחה עם|מפגש עם|רב.?שיח|סדנ|workshop|סמינר|כנס/i.test(t))return 'lecture';
+ if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|סינמטק|פלאנט|planet/i.test(t))return 'movie';
  if(/סטנד.?אפ|stand.?up|קומי/i.test(t))return 'standup';
  if(/משחק|נגד|vs\.?|מכבי|הפועל|בית"ר|ליגה|יורוליג|כדורגל|כדורסל|match|game/i.test(t))return 'sport';
  if(/פסטיבל|festival/i.test(t))return 'festival';
@@ -75,8 +77,8 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
   files,links:ticketLinks(m),mailed,cancelled:/בוטל|cancel+ed|refund/i.test(subject)};}
 const SCHEMA={type:'OBJECT',properties:{
  isTicket:{type:'BOOLEAN',description:'true only for tickets/booking confirmations for an event the user will attend (concert, show, movie, sport, festival, stand-up, lecture). false for flights, hotels, shop orders, marketing, newsletters.'},
- title:{type:'STRING',description:'Short event name as people say it, in the language used in the mail (Hebrew preferred). No words like "אישור הזמנה" or order numbers.'},
- kind:{type:'STRING',enum:['concert','show','movie','sport','festival','standup','other']},
+ title:{type:'STRING',description:'Short event name as people say it, in the language used in the mail (Hebrew preferred): the film, show, artist or lecture title - not the cinema or venue name. No words like "אישור הזמנה" or order numbers.'},
+ kind:{type:'STRING',enum:['concert','show','movie','lecture','sport','festival','standup','other'],description:'lecture = a talk, lecture, panel, workshop or conversation with a speaker - also when held at a cinema or cinematheque. movie = a film screening.'},
  start:{type:'STRING',description:'Event start in local time, YYYY-MM-DDTHH:mm (or YYYY-MM-DD if no time). Not the purchase date.'},
  doors:{type:'STRING',description:'Doors/gates opening time HH:mm, if stated'},
  venue:{type:'STRING',description:'Venue or hall name'},address:{type:'STRING',description:'Street address of the venue, if stated'},city:{type:'STRING'},
@@ -89,12 +91,12 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  if(!process.env.GEMINI_API_KEY)return {ok:false};
  const subject=header(m,'subject'),from=header(m,'from');const mailed=+(m.internalDate||Date.now());
  const prompt='Mail sent '+new Date(mailed).toISOString().slice(0,10)+'\nFrom: '+from+'\nSubject: '+subject+'\n\n'+text.slice(0,7000);
- const r=await gemini({systemInstruction:{parts:[{text:'You read emails for an Israeli user and extract event ticket details as JSON. Be exact; leave fields out when the mail does not say them.'}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseSchema:SCHEMA,temperature:0}},20000);
+ const r=await gemini({systemInstruction:{parts:[{text:'You read emails for an Israeli user and extract event ticket details as JSON. Cinemas and cinematheques sell tickets to lectures and talks too: tell a lecture from a film screening. Be exact; leave fields out when the mail does not say them.'}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseSchema:SCHEMA,temperature:0}},20000);
  if(!r.ok)return {ok:false};
  let j:Record<string,any>;try{j=JSON.parse(r.text);}catch{return {ok:false};}
  if(!j.isTicket||!/^\d{4}-\d{2}-\d{2}/.test(String(j.start||'')))return {ok:true,ticket:null};
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;
- return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','sport','festival','standup','other'].includes(j.kind)?j.kind:guessKind(subject+text)) as Kind,
+ return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:guessKind(subject+text)) as Kind,
   start:String(j.start).slice(0,16),doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
   order:s(j.order),provider:s(j.provider),price:s(j.price),files:ticketFiles(m).map(f=>({...f,msg:m.id})),links:ticketLinks(m),mailed,ai:true,cancelled:!!j.cancelled}};}
 export type Read={ticket:Ticket|null;retry:boolean};

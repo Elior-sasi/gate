@@ -1,11 +1,11 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
-import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
+import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
-const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},other:{label:'אירוע',Icon:TicketIcon}};
+const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},other:{label:'אירוע',Icon:TicketIcon}};
 const DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];const DAY_SHORT=["א'","ב'","ג'","ד'","ה'","ו'",'שבת'];
 const MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const MON_SHORT=['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
@@ -28,7 +28,7 @@ const fileUrl=(f:TFile)=>'/api/file?'+new URLSearchParams({m:f.msg,a:f.id,n:f.na
 const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:/image/.test(f.type)?QrCode:FileText;
 const fileLabel=(f:TFile,i:number,n:number)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):'כרטיס'+(n>1?' '+(i+1):'');
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":-]*[A-Za-z0-9)]/g,m=>'⁦'+m+'⁩');
-const KEY=(u:string)=>'gate:v2:'+u;const HID=(u:string)=>'gate:hidden:'+u;
+const KEY=(u:string)=>'gate:v3:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
 function mergeAll(a:Ticket[],b:Ticket[]){const by=new Map(a.map(t=>[t.key,t]));
