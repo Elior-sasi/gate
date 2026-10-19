@@ -9,7 +9,7 @@
 
 /* Same look as Unbox. The palette is the --acc / --acc2 pair (and their soft/deep tints): swap these to recolor the whole app. */
 :root{color-scheme:dark;--bg:#0a0f14;--card:#121a22;--card2:#18222c;--line:#223040;--ink:#f2f4f8;--mut:#b4bdca;
- --acc:#4aa8ff;--acc2:#2ed3c6;--acc-soft:#16314d;--acc-edge:#3b6fa3;--acc-text:#9fd2ff;--acc-ink:#05182b;--glow:#0f2a3d80;
+ --acc:#ffb547;--acc2:#ffd27a;--acc-soft:#3a2a10;--acc-edge:#a77a2c;--acc-text:#ffd79a;--acc-ink:#2a1800;--glow:#3a2a1090;
  --ok:#3fd49a;--bad:#ff8fa3;--nav-h:62px;--fs:1}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%;touch-action:pan-x pan-y;scrollbar-width:none}html::-webkit-scrollbar,*::-webkit-scrollbar{display:none}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 calc(17px*var(--fs))/1.45 Rubik,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overflow-x:hidden;overscroll-behavior-y:contain}
