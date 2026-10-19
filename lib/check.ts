@@ -21,3 +21,10 @@ export async function check(u:Row,sql:Sql){let tickets=u.tickets||[];let sent=u.
  const subs=(u.subs||[]).filter(s=>!dead.has(s.endpoint));
  await sql`update gate_users set tickets=${JSON.stringify(tickets)},seen=${JSON.stringify([...seen].slice(-600))},sent=${JSON.stringify(sent)},subs=${JSON.stringify(subs)},checked_at=now() where user_id=${u.user_id}`;
  return {sent:ok,notes:notes.length,gmail:gmailOk};}
+// Gmail instant push: Gmail tells our Pub/Sub topic about new mail the moment it arrives (lib: /api/gmail-push).
+// A watch lasts 7 days, so it is renewed every 6.
+export const GMAIL_TOPIC=process.env.GMAIL_TOPIC||'projects/gate-512116/topics/gmail';
+export async function watch(u:Row,sql:Sql){const k='watch:'+u.user_id;const last=(await sql`select v from gate_meta where k=${k}`)[0]?.v;if(last&&Date.now()-new Date(last as string).getTime()<6*864e5)return false;
+ if(!u.refresh)return false;const access=await freshAccess({refreshToken:unseal(u.refresh),expiresAt:0,accessToken:''});
+ const r=await fetch('https://gmail.googleapis.com/gmail/v1/users/me/watch',{method:'POST',headers:{Authorization:'Bearer '+access,'Content-Type':'application/json'},body:JSON.stringify({topicName:GMAIL_TOPIC,labelIds:['INBOX'],labelFilterBehavior:'include'}),signal:AbortSignal.timeout(15000)});
+ if(r.ok)await sql`insert into gate_meta(k,v) values(${k},now()) on conflict(k) do update set v=now()`;return r.ok;}
