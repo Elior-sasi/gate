@@ -22,7 +22,7 @@ a{color:var(--acc-text);text-decoration:none}:focus-visible{outline:3px solid va
 
 /* header */
 .top{padding:4px 4px 0}.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.brand{display:flex;align-items:flex-end;gap:1px;font-size:calc(24px*var(--fs));font-weight:700;color:#eaf4ff;line-height:1;letter-spacing:-.2px}.brand svg{height:1.02em;width:auto;margin:0 -.06em -.02em 0}
+.brand{display:flex;align-items:flex-end;gap:1px;font-size:calc(24px*var(--fs));font-weight:700;color:#eaf4ff;line-height:1;letter-spacing:-.2px}.brand svg{height:1.3em;width:auto;margin:0 1px -.06em 0}
 .actions{display:flex;gap:8px}
 .ib{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#1a1f27;border:1px solid var(--line);color:#d3dbe6;flex-shrink:0}.ib svg{width:21px;height:21px}
 h1{font-size:calc(32px*var(--fs));font-weight:700;letter-spacing:-.4px;margin:14px 0 0;line-height:1.2}
@@ -118,13 +118,13 @@ nav button svg{width:22px;height:22px}nav button.selected{color:var(--acc-text)}
 .smark{width:118px;height:auto;overflow:visible}
 .sname{font-size:34px;font-weight:700;letter-spacing:-.3px;color:#eaf4ff;animation:sin .6s .55s ease-out both}
 @keyframes sin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.mark .tk{transform-box:view-box}
+.mark .tk{transform-box:view-box;transform-origin:256px 132px}
 .mark.draw .ring{stroke-dasharray:100;animation:gdraw .85s cubic-bezier(.6,0,.2,1) both}
 @keyframes gdraw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
 .mark.draw .tk{animation:tkin .6s .65s cubic-bezier(.2,.9,.3,1.25) both}
-@keyframes tkin{from{transform:translateX(140px) rotate(8deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes tkin{from{transform:translateY(-70px) rotate(-14deg);opacity:0}to{transform:none;opacity:1}}
 .mark.bob .tk{animation:tkbob 1.6s cubic-bezier(.45,0,.55,1) infinite}
-@keyframes tkbob{0%,100%{transform:translateX(0)}50%{transform:translateX(64px) rotate(-6deg)}}
+@keyframes tkbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-58px) rotate(-8deg)}}
 .loader{display:flex;flex-direction:column;align-items:center;gap:18px;padding:56px 0 40px;color:var(--mut);font-size:calc(17px*var(--fs))}
 .lmark{width:104px;height:auto;overflow:visible;animation:lbob 1.6s ease-in-out infinite}
 @keyframes lbob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
@@ -138,3 +138,13 @@ nav.dragging:before{transition:none}
 
 .steps2{margin:8px 0;padding-inline-start:20px;color:var(--mut);line-height:1.7;font-size:calc(15px*var(--fs))}.steps2 b{color:var(--ink)}
 .set .primary,.set .ghost{margin-top:10px}
+
+.app.large{--fs:1.18}.app.xlarge{--fs:1.36}
+.seg{display:flex;gap:6px;background:#0d141b;border:1px solid var(--line);border-radius:16px;padding:5px;margin-top:6px}
+.seg button{flex:1;min-height:44px;border-radius:12px;color:var(--mut);font-weight:600;font-size:calc(15px*min(var(--fs),1.2))}
+.seg button.on{background:var(--acc-soft);color:#fff;box-shadow:inset 0 0 0 1px var(--acc-edge)}
+nav.none:before{opacity:0}
+.statGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 8px;text-align:center}.stat b{display:block;font-size:calc(28px*var(--fs));font-weight:700}.stat span{color:var(--mut);font-size:calc(14px*var(--fs))}
+.moneyBig b{font-size:calc(30px*var(--fs));font-weight:800;color:var(--acc-text)}
+.kindRow{display:grid;grid-template-columns:minmax(90px,auto) 1fr 28px;align-items:center;gap:10px;padding:7px 0}.kindRow span{display:flex;align-items:center;gap:6px}.kindRow i{display:block;height:10px;border-radius:10px;background:linear-gradient(90deg,var(--acc),var(--acc2))}.kindRow b{text-align:left}

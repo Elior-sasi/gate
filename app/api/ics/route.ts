@@ -14,7 +14,7 @@ export async function POST(req:NextRequest){
  const desc=[g('seats')&&'מקומות: '+g('seats'),g('doors')&&'פתיחת דלתות: '+g('doors'),g('order')&&'מספר הזמנה: '+g('order'),g('provider')].filter(Boolean).join('\n');
  const stamp=new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+/,'');const uid=d+'-'+(g('order')||title).replace(/[^\w]/g,'').slice(0,40)+'@gate';
  const alarm=(trigger:string)=>['BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+esc(title),'TRIGGER:'+trigger,'END:VALARM'];
- const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Gate//HE','CALSCALE:GREGORIAN','METHOD:PUBLISH',
+ const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Unstage//HE','CALSCALE:GREGORIAN','METHOD:PUBLISH',
   'BEGIN:VTIMEZONE','TZID:Asia/Jerusalem','BEGIN:STANDARD','DTSTART:19701025T020000','RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU','TZOFFSETFROM:+0300','TZOFFSETTO:+0200','TZNAME:IST','END:STANDARD','BEGIN:DAYLIGHT','DTSTART:19700327T020000','RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1FR','TZOFFSETFROM:+0200','TZOFFSETTO:+0300','TZNAME:IDT','END:DAYLIGHT','END:VTIMEZONE',
   'BEGIN:VEVENT','UID:'+uid,'DTSTAMP:'+stamp,
   ...(timed?['DTSTART;TZID=Asia/Jerusalem:'+d+'T'+m[4]+m[5]+'00','DTEND;TZID=Asia/Jerusalem:'+end]:['DTSTART;VALUE=DATE:'+d,'DTEND;VALUE=DATE:'+end]),

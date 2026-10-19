@@ -27,7 +27,7 @@ export async function POST(req:NextRequest){
   const refresh=u.refreshToken?seal(u.refreshToken):String(row?.refresh||'');
   await sql`insert into gate_users(user_id,email,refresh,subs,tickets,hidden) values(${u.id},${u.email},${refresh},${JSON.stringify(subs)},${JSON.stringify(tickets)},${JSON.stringify(hidden)})
    on conflict(user_id) do update set email=excluded.email,refresh=excluded.refresh,subs=excluded.subs,tickets=excluded.tickets,hidden=excluded.hidden,updated_at=now()`;
-  if(b.test||b.subscription){const target=b.subscription?[b.subscription]:subs;let ok=0;for(const s of target)if(await send(s,{title:'Gate',body:b.subscription?'ההתראות פעילות ✓':'התראת בדיקה ✓',tag:'test',url:'/'}).catch(()=>false))ok++;
+  if(b.test||b.subscription){const target=b.subscription?[b.subscription]:subs;let ok=0;for(const s of target)if(await send(s,{title:'Unstage',body:b.subscription?'ההתראות פעילות ✓':'התראת בדיקה ✓',tag:'test',url:'/'}).catch(()=>false))ok++;
    if(!ok)return Response.json({error:'ההתראה לא נשלחה. נסה לכבות ולהפעיל שוב.'},{status:502,headers:H});}
   return Response.json({ok:true,devices:subs.length},{headers:H});
  }catch(e){const code=e instanceof Error?e.message:'';return Response.json({error:code==='UNAUTHORIZED'?'צריך להיכנס מחדש עם Google.':'לא ניתן לשמור כרגע. נסה שוב.',code},{status:400,headers:H});}}

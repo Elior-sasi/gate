@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
-import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
+import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
@@ -28,6 +28,7 @@ const fileUrl=(f:TFile)=>'/api/file?'+new URLSearchParams({m:f.msg,a:f.id,n:f.na
 const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:/image/.test(f.type)?QrCode:FileText;
 const fileLabel=(f:TFile,i:number,n:number)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):'כרטיס'+(n>1?' '+(i+1):'');
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":-]*[A-Za-z0-9)]/g,m=>'⁦'+m+'⁩');
+const NAM=(u:string)=>'gate:names:'+u;
 const KEY=(u:string)=>'gate:v4:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
@@ -41,16 +42,16 @@ function mergeAll(a:Ticket[],b:Ticket[]){let out=[...a];
 function addToCalendar(t:Ticket){const f=document.createElement('form');f.method='POST';f.action='/api/ics';
  const v:Record<string,string>={start:t.start,title:t.title,venue:t.venue||'',address:t.address||'',city:t.city||'',seats:t.seats.join('; '),doors:t.doors||'',order:t.order||'',provider:t.provider||'',hours:t.kind==='movie'?'2':'3'};
  for(const [k,val] of Object.entries(v)){const i=document.createElement('input');i.type='hidden';i.name=k;i.value=val;f.appendChild(i);}document.body.appendChild(f);f.submit();f.remove();}
-// The G of "Gate": a gold ring whose bar is a ticket with a tear line (same idea as the U of Unbox).
-// anim "draw": the ring draws itself and the ticket slides in (opening screen); "bob": the ticket slides in and out (loading).
-function Mark({cls,anim}:{cls?:string;anim?:'draw'|'bob'}){const id=anim||'s';return <svg className={'mark'+(anim?' '+anim:'')+(cls?' '+cls:'')} viewBox="118 140 282 272" aria-hidden="true"><defs><linearGradient id={'lg'+id} gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="150"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id={'lm'+id} maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="262" cy="276" r="16" fill="#000"/><circle cx="398" cy="276" r="16" fill="#000"/></mask></defs><path className="ring" pathLength="100" d="M331 201 A106 106 0 1 0 362 276" fill="none" stroke={'url(#lg'+id+')'} strokeWidth="58" strokeLinecap="round"/><g className="tk"><rect x="262" y="246" width="136" height="60" rx="14" fill="#ffd27a" mask={'url(#lm'+id+')'}/><line x1="352" y1="256" x2="352" y2="296" stroke="var(--bg)" strokeWidth="6" strokeDasharray="3 9" strokeLinecap="round"/></g></svg>;}
+// The U of "Unstage": the same U as Unbox, with a ticket as its lid.
+// anim "draw": the U draws itself and the ticket drops on (opening screen); "bob": the ticket lifts and lands (loading).
+function Mark({cls,anim}:{cls?:string;anim?:'draw'|'bob'}){const id=anim||'s';return <svg className={'mark'+(anim?' '+anim:'')+(cls?' '+cls:'')} viewBox="100 70 312 392" aria-hidden="true"><defs><linearGradient id={'lg'+id} gradientUnits="userSpaceOnUse" x1="0" y1="430" x2="0" y2="180"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id={'lm'+id} maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="156" cy="132" r="14.6" fill="#000"/><circle cx="356" cy="132" r="14.6" fill="#000"/></mask></defs><path className="ring" pathLength="100" d="M150 214 V320 a106 106 0 0 0 212 0 V210" fill="none" stroke={'url(#lg'+id+')'} strokeWidth="58" strokeLinecap="round"/><g className="tk"><g transform="rotate(-10 256 132)"><rect x="156" y="89" width="200" height="86" rx="16" fill="#ffd27a" mask={'url(#lm'+id+')'}/><line x1="296" y1="101" x2="296" y2="163" stroke="var(--bg)" strokeWidth="7" strokeDasharray="3 11" strokeLinecap="round"/></g></g></svg>;}
 const Logo=()=><Mark/>;
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
- const [tab,setTab]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
+ const [tab,setTab]=useState(0);const [names,setNames]=useState<Record<string,string>>({});const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);const [prog,setProg]=useState<[number,number]|null>(null);const [err,setErr]=useState('');const [toast,setToast]=useState('');
  const running=useRef(false);
- useEffect(()=>{if(!user)return;if(user.id==='demo'){import('@/lib/demo').then(d=>{setStore(d.demo());setReady(true);});return;}setStore(load(KEY(user.id),{tickets:[],read:[],updated:''}));setHidden(load(HID(user.id),[]));setReady(true);},[user]);
+ useEffect(()=>{if(!user)return;if(user.id==='demo'){import('@/lib/demo').then(d=>{setStore(d.demo());setReady(true);});return;}setStore(load(KEY(user.id),{tickets:[],read:[],updated:''}));setHidden(load(HID(user.id),[]));setNames(load(NAM(user.id),{}));setSize(load('unstage:size',0));setReady(true);},[user]);
  const say=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),2200);};
  const scan=useCallback(async(fresh=false)=>{if(!user||running.current)return;running.current=true;setBusy(true);setErr('');
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
@@ -94,9 +95,9 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||(navigator as {standalone?:boolean}).standalone===true;
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){setPush(ios&&!standalone?'install':'unsupported');return;}
   try{const reg=await navigator.serviceWorker.register('/sw.js');if(Notification.permission==='denied'){setPush('denied');return;}const sub=await reg.pushManager.getSubscription();setPush(sub&&Notification.permission==='granted'?'on':'off');}catch{setPush('unsupported');}})();},[user]);
- const sendServer=useCallback(async(extra:Record<string,unknown>={})=>{if(!user)return null;const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickets:load(KEY(user.id),{tickets:[] as Ticket[]}).tickets,hidden:load(HID(user.id),[] as string[]),...extra})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'השמירה נכשלה');return d;},[user]);
+ const sendServer=useCallback(async(extra:Record<string,unknown>={})=>{if(!user)return null;const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickets:(()=>{const nm=load(NAM(user.id),{} as Record<string,string>);return load(KEY(user.id),{tickets:[] as Ticket[]}).tickets.map(t=>nm[t.key]?{...t,title:nm[t.key]}:t);})(),hidden:load(HID(user.id),[] as string[]),...extra})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'השמירה נכשלה');return d;},[user]);
  // After every scan, the server copy follows the phone.
- const synced=useRef('');useEffect(()=>{if(!srv?.enabled||busy||!store.updated)return;const sig=store.updated+'|'+hidden.length;if(synced.current===sig)return;synced.current=sig;sendServer().catch(()=>{});},[srv,busy,store.updated,hidden.length,sendServer]);
+ const synced=useRef('');useEffect(()=>{if(!srv?.enabled||busy||!store.updated)return;const sig=store.updated+'|'+hidden.length+'|'+JSON.stringify(names).length;if(synced.current===sig)return;synced.current=sig;sendServer().catch(()=>{});},[srv,busy,store.updated,hidden.length,names,sendServer]);
  async function enablePush(){setPushMsg('');const perm=await Notification.requestPermission();if(perm!=='granted'){setPush(perm==='denied'?'denied':'off');return;}setPush('busy');
   try{const reg=await navigator.serviceWorker.ready;const key=Uint8Array.from(atob((srv?.publicKey||'').replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
    const sub=await reg.pushManager.getSubscription()||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});await sendServer({subscription:sub.toJSON()});setPush('on');}
@@ -105,23 +106,25 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  async function testPush(){setPushMsg('');try{await sendServer({test:true});setPushMsg('נשלחה התראת בדיקה');}catch(e){setPushMsg(e instanceof Error?e.message:'השליחה נכשלה');}}
  // A notification or the widget opens a ticket directly: /?t=<event>.
  useEffect(()=>{if(!ready)return;const k=new URLSearchParams(location.search).get('t');if(!k)return;history.replaceState(null,'','/');if(store.tickets.some(t=>t.key===k))setOpen(k);},[ready,store.tickets]);
- const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Gate</div></div>;
- const visible=useMemo(()=>{const s=q.trim().toLowerCase();return store.tickets.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[store,hidden,q]);
+ const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Unstage</div></div>;
+ const named=useMemo(()=>store.tickets.map(t=>names[t.key]?{...t,title:names[t.key]}:t),[store.tickets,names]);
+ const visible=useMemo(()=>{const s=q.trim().toLowerCase();return named.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[named,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
  const past=useMemo(()=>visible.filter(t=>!upcoming(t)).sort((a,b)=>when(b).getTime()-when(a).getTime()),[visible]);
  const hero=next.find(t=>!t.cancelled);
- const sel=store.tickets.find(t=>t.key===open);
+ const sel=named.find(t=>t.key===open);
  useEffect(()=>{const back=()=>setOpen(null);if(open){history.pushState({sheet:1},'');addEventListener('popstate',back);return ()=>removeEventListener('popstate',back);}},[open]);
  const close=()=>{if(history.state?.sheet)history.back();else setOpen(null);};
+ const rename=(k:string)=>{if(!user)return;const cur=names[k]||store.tickets.find(t=>t.key===k)?.title||'';const v=prompt('שם לאירוע',cur);if(v===null)return;const n={...names};if(v.trim()&&v.trim()!==store.tickets.find(t=>t.key===k)?.title)n[k]=v.trim().slice(0,120);else delete n[k];setNames(n);save(NAM(user.id),n);say('השם עודכן');};
  const hide=(k:string)=>{if(!user)return;const h=[...hidden,k];setHidden(h);save(HID(user.id),h);close();say('האירוע הוסתר');};
- if(!configured)return <main className="app">{splashEl}<Header/><div className="panel"><TicketIcon size={40}/><h2>Gate עוד לא מחובר</h2><p>חסרים מפתחות ב-Vercel (AUTH_GOOGLE_SECRET, AUTH_SECRET).</p></div></main>;
- if(!user)return <main className="app">{splashEl}<Header/><h1>הכרטיסים שלך,<br/>במקום אחד</h1><p className="sub">Gate קורא את מיילי הכרטיסים ב-Gmail ומסדר כל הופעה, הצגה וסרט בכרטיס אחד - עם התאריך, המקום, הכיסאות והברקוד לכניסה.</p>
+ if(!configured)return <main className="app">{splashEl}<Header/><div className="panel"><TicketIcon size={40}/><h2>Unstage עוד לא מחובר</h2><p>חסרים מפתחות ב-Vercel (AUTH_GOOGLE_SECRET, AUTH_SECRET).</p></div></main>;
+ if(!user)return <main className="app">{splashEl}<Header/><h1>הכרטיסים שלך,<br/>במקום אחד</h1><p className="sub">Unstage קורא את מיילי הכרטיסים ב-Gmail ומסדר כל הופעה, הצגה וסרט בכרטיס אחד - עם התאריך, המקום, הכיסאות והברקוד לכניסה.</p>
   <form action={login}><button className="primary"><Mail size={20}/>כניסה עם Google</button></form><p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. הכרטיסים נשמרים רק בטלפון שלך.</p></main>;
  const list=tab===0?next:past;
- return <main className={'app'+(sel?' detailOn':'')}>
+ return <main className={'app'+(sel?' detailOn':'')+(size===1?' large':size===2?' xlarge':'')}>
   {splashEl}
   {pull>0&&!sel&&<div className={'ptr'+(pull>=80?' ready':'')} style={{transform:'translate(-50%,'+Math.max(0,pull-46)+'px)',opacity:Math.min(1,pull/80)}} aria-hidden="true"><RefreshCw style={{transform:'rotate('+pull*3+'deg)'}}/></div>}
-  <Header actions={<button className="ib" onClick={()=>scan()} disabled={busy} aria-label="סריקה מחדש"><RefreshCw className={busy?'spin':''}/></button>}/>
+  <Header actions={<><button className="ib" onClick={()=>scan()} disabled={busy} aria-label="סריקה מחדש"><RefreshCw className={busy?'spin':''}/></button><button className="ib" onClick={()=>{setTab(3);scrollTo({top:0});}} aria-label="הגדרות"><Settings/></button></>}/>
   {!gmail&&<div className="error"><span>נכנסת עם Google, אבל לא אישרת קריאת Gmail.</span><form action={login}><button className="ghost">חידוש הרשאה</button></form></div>}
   {err&&<div className="error"><span>{err}</span><button className="ghost" onClick={()=>scan()}>נסה שוב</button></div>}
   {prog&&prog[1]>0&&<div className="progress"><div className="pbar"><i style={{width:Math.round(prog[0]/prog[1]*100)+'%'}}/></div><div className="plabel">קורא מיילים {prog[0]} מתוך {prog[1]}</div></div>}
@@ -135,12 +138,13 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
     return <>{tab===0&&hero&&!q&&rest.length>0&&<div className="listH">בהמשך</div>}<div className="list">{rest.map((t,i)=><Card key={t.key} t={t} i={i} onOpen={()=>setOpen(t.key)}/>)}</div></>;})()}
    {store.updated&&<p className="footnote">עודכן {new Date(store.updated).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}</p>}
   </>}
-  {tab===2&&<SettingsView user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
-  {sel&&<Sheet t={sel} onClose={close} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
+  {tab===2&&<Summary list={visible}/>}
+  {tab===3&&<SettingsView size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
+  {sel&&<Sheet t={sel} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
   {toast&&<div className="toast" role="status">{toast}</div>}
-  {!sel&&<nav className={navDrag!==null?'dragging':''} style={{['--tab' as string]:navDrag??tab}} aria-label="ניווט" onTouchStart={e=>navSlide(e,false)} onTouchMove={e=>navSlide(e,true)} onTouchEnd={()=>setNavDrag(null)} onTouchCancel={()=>setNavDrag(null)}>{[['קרובים',CalendarDays],['היו',History],['הגדרות',Settings]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
+  {!sel&&<nav className={(navDrag!==null?'dragging':'')+(tab===3&&navDrag===null?' none':'')} style={{['--tab' as string]:navDrag??tab}} aria-label="ניווט" onTouchStart={e=>navSlide(e,false)} onTouchMove={e=>navSlide(e,true)} onTouchEnd={()=>setNavDrag(null)} onTouchCancel={()=>setNavDrag(null)}>{[['קרובים',CalendarDays],['היו',History],['סיכום',ChartColumn]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
  </main>;}
-function Header({actions}:{actions?:React.ReactNode}){return <header className="top row"><span className="brand" dir="ltr" aria-label="Gate"><Logo/><span aria-hidden="true">ate</span></span><div className="actions">{actions}</div></header>;}
+function Header({actions}:{actions?:React.ReactNode}){return <header className="top row"><span className="brand" dir="ltr" aria-label="Unstage"><Logo/><span aria-hidden="true">nstage</span></span><div className="actions">{actions}</div></header>;}
 function Hero({t,onOpen}:{t:Ticket;onOpen:()=>void}){const [n,u]=countdown(t);const K=KIND[t.kind];
  return <button className="nextCard" onClick={onOpen}>
   <div className="nc-k"><K.Icon size={16}/>האירוע הבא · {K.label}</div>
@@ -156,11 +160,11 @@ function Card({t,i=0,onOpen}:{t:Ticket;i?:number;onOpen:()=>void}){const d=when(
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className="pill"><K.Icon/>{K.label}</span>}{timed(t)&&<span className="pill soft">{time(t)}</span>}
     {n>1&&n<=14&&!t.cancelled&&<span className="pill hot">בעוד {n} ימים</span>}{n===1&&!t.cancelled&&<span className="pill hot">מחר</span>}
     {t.files.length>0&&<span className="pill soft"><QrCode/>כרטיס</span>}</div></div></div></button>;}
-function Sheet({t,onClose,onHide,onCopy}:{t:Ticket;onClose:()=>void;onHide:()=>void;onCopy:()=>void}){const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
-  <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button></div>
+  <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div>
   <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2>{bidi(t.title)}</h2>
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
    <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd"><b>{n}</b><span>{u}</span></div>}</div>
@@ -179,23 +183,25 @@ function Sheet({t,onClose,onHide,onCopy}:{t:Ticket;onClose:()=>void;onHide:()=>v
    <a className="ghost" href={'https://mail.google.com/mail/u/0/#all/'+t.thread} target="_blank" rel="noopener"><Mail size={19}/>פתיחת המייל</a></div>
   <button className="textBtn" onClick={onHide}><EyeOff size={16} style={{verticalAlign:-3,marginLeft:6}}/>זה לא כרטיס - הסתר</button>
  </div>;}
-// Scriptable widget source with the personal link inside; the drawing code itself comes from Gate, so updates arrive by themselves.
-const widgetScript=(url:string)=>`// Gate widget: loads its drawing code from Gate, so updates arrive by themselves.
+// Scriptable widget source with the personal link inside; the drawing code itself comes from Unstage, so updates arrive by themselves.
+const widgetScript=(url:string)=>`// Unstage widget: loads its drawing code from Unstage, so updates arrive by themselves.
 const u=${JSON.stringify(url)}
 const r=await new Request(u).loadJSON().catch(()=>null)
 const code=await new Request(u+'&js=1').loadString().catch(()=>'')
 const AF=Object.getPrototypeOf(async function(){}).constructor
 if(code&&code.includes('ListWidget')){await new AF('r',code)(r)}else{const w=new ListWidget();w.backgroundColor=new Color('#0a0f14');const t=w.addText(r&&r.lines?r.lines.map(x=>x.t).join('\\n'):'אין נתונים כרגע');t.textColor=Color.white();t.font=Font.boldSystemFont(15);if(config.runsInWidget)Script.setWidget(w);else await w.presentSmall();Script.complete()}`;
 type SrvProps={srv:{enabled:boolean;devices?:number;calendar?:string;widget?:string}|null;push:string;pushMsg:string;onPush:()=>void;onTest:()=>void;onCopy:(t:string)=>void};
-function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan}:{user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void}&SrvProps){
+function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan,size,onSize}:{user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void;size:number;onSize:(i:number)=>void}&SrvProps){
  const noDb=srv&&!srv.enabled;
+ const speakUrl=srv?.widget?.replace('/api/widget','/api/speak');
  return <><h1>הגדרות</h1><div className="settings">
+  <div className="set"><h3><Type size={18}/>גודל טקסט</h3><div className="seg" role="radiogroup" aria-label="גודל טקסט">{['רגיל','גדול','גדול מאוד'].map((l,i)=><button key={i} role="radio" aria-checked={size===i} className={size===i?'on':''} onClick={()=>onSize(i)}>{l}</button>)}</div></div>
   <div className="set"><h3><Bell size={18}/>התראות</h3>
    <p className="setNote">ערב לפני כל אירוע, שלוש שעות לפני עם הכרטיס מוכן, וכשמגיע כרטיס חדש למייל.</p>
    {noDb?<p className="setNote">השרת עוד לא חובר למסד נתונים.</p>
     :push==='install'?<p className="setNote">באייפון התראות עובדות רק מהאפליקציה שבמסך הבית: שיתוף ← <b>הוסף למסך הבית</b>, ואז לפתוח משם.</p>
     :push==='unsupported'?<p className="setNote">הדפדפן הזה לא תומך בהתראות.</p>
-    :push==='denied'?<p className="setNote">ההתראות חסומות בהגדרות הטלפון עבור Gate.</p>
+    :push==='denied'?<p className="setNote">ההתראות חסומות בהגדרות הטלפון עבור Unstage.</p>
     :<><button className={push==='on'?'ghost':'primary'} disabled={push==='busy'||push==='checking'||!srv} onClick={onPush}>{push==='on'?<><BellOff size={18}/>כיבוי התראות</>:<><Bell size={18}/>הפעלת התראות</>}</button>
      {push==='on'&&<button className="ghost" onClick={onTest}><Check size={18}/>התראת בדיקה</button>}</>}
    {pushMsg&&<p className="setNote">{pushMsg}</p>}</div>
@@ -205,9 +211,30 @@ function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,on
    <button className="ghost" onClick={()=>onCopy(srv.calendar!.replace(/^webcal/,'https'))}><Copy size={18}/>העתקת הקישור (ל-Google Calendar)</button></div>}
   {srv?.widget&&<div className="set"><h3><Smartphone size={18}/>ווידג'ט למסך הבית ולמסך הנעילה</h3>
    <p className="setNote">מראה את האירוע הבא ומה אחריו. עובד דרך אפליקציית <b>Scriptable</b> (חינם ב-App Store).</p>
-   <ol className="steps2"><li>העתק את הסקריפט.</li><li>ב-Scriptable: <b>+</b>, הדבק ושמור בשם <b>Gate</b>.</li><li>במסך הבית: לחיצה ארוכה ← <b>+</b> ← Scriptable ← גודל בינוני. בהגדרות הווידג'ט בחר את הסקריפט <b>Gate</b>.</li><li>גם למסך הנעילה: התאמה אישית ← מסך נעילה ← Scriptable, ובחר <b>Gate</b>.</li></ol>
+   <ol className="steps2"><li>העתק את הסקריפט.</li><li>ב-Scriptable: <b>+</b>, הדבק ושמור בשם <b>Unstage</b>.</li><li>במסך הבית: לחיצה ארוכה ← <b>+</b> ← Scriptable ← גודל בינוני. בהגדרות הווידג'ט בחר את הסקריפט <b>Unstage</b>.</li><li>גם למסך הנעילה: התאמה אישית ← מסך נעילה ← Scriptable, ובחר <b>Unstage</b>.</li></ol>
    <button className="ghost" onClick={()=>onCopy(widgetScript(srv.widget!))}><Copy size={18}/>העתקת הסקריפט</button></div>}
+  {speakUrl&&<div className="set"><h3><Mic size={18}/>לשאול את Siri</h3>
+   <p className="setNote">אומרים "היי Siri, מה האירוע הבא שלי" ושומעים מה, מתי ואיפה.</p>
+   <ol className="steps2"><li>העתק את הקישור האישי.</li><li>באפליקציית קיצורים: <b>+</b> ← הוסף פעולה <b>קבל תוכן של URL</b> והדבק את הקישור.</li><li>הוסף פעולה <b>דבר טקסט</b>.</li><li>שמור את הקיצור בשם <b>מה האירוע הבא שלי</b>.</li></ol>
+   <button className="ghost" onClick={()=>onCopy(speakUrl)}><Copy size={18}/>העתקת הקישור האישי</button>
+   <button className="ghost" onClick={async()=>{try{const t=await (await fetch(speakUrl,{cache:'no-store'})).text();const u=new SpeechSynthesisUtterance(t);u.lang='he-IL';speechSynthesis.cancel();speechSynthesis.speak(u);}catch{}}}><Volume2 size={18}/>השמע עכשיו</button></div>}
   <div className="set"><h3><Mail size={18}/>חשבון</h3><p className="setNote"><b>{user.name}</b><br/><span dir="ltr">{user.email}</span></p><button className="ghost" onClick={()=>signOut({redirectTo:'/'})}><LogOut size={18}/>יציאה</button></div>
-  <div className="set"><h3><RefreshCw size={18}/>סריקה</h3><p className="setNote">Gate קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
+  <div className="set"><h3><RefreshCw size={18}/>סריקה</h3><p className="setNote">Unstage קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
    {hiddenCount>0&&<button className="ghost" onClick={onRestore}><EyeOff size={18}/>החזרת {hiddenCount} אירועים מוסתרים</button>}</div>
   <p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. רשימת האירועים נשמרת בטלפון, ועותק שלה בשרת בשביל התזכורות, היומן והווידג'ט. קובצי הכרטיס נפתחים ישירות מהמייל שלך. <a href="/privacy">פרטיות</a></p></div></>;}
+
+// Summary tab: how many events, what kind, where, and what they cost.
+function Summary({list}:{list:Ticket[]}){const y=new Date().getFullYear();const real=list.filter(t=>!t.cancelled);
+ const years=[...new Set(real.map(t=>+t.start.slice(0,4)))].sort((a,b)=>b-a);const [yr,setYr]=useState(years.includes(y)?y:years[0]||y);
+ const inYear=real.filter(t=>+t.start.slice(0,4)===yr);const past=inYear.filter(t=>!upcoming(t)).length;
+ const money=(p?:string)=>{const m=(p||'').replace(/,/g,'').match(/\d+(?:\.\d+)?/);return p&&/₪/.test(p)&&m?+m[0]:0;};const spent=inYear.reduce((a,t)=>a+money(t.price),0);
+ const kinds=Object.entries(inYear.reduce((a,t)=>({...a,[t.kind]:(a[t.kind]||0)+1}),{} as Record<string,number>)).sort((a,b)=>b[1]-a[1]);
+ const venues=Object.entries(inYear.reduce((a,t)=>{const v=(t.venue||'').split(' - ')[0].trim();return v?{...a,[v]:(a[v]||0)+1}:a;},{} as Record<string,number>)).sort((a,b)=>b[1]-a[1]).slice(0,5);
+ const max=Math.max(1,...kinds.map(k=>k[1]));
+ return <><h1>סיכום</h1>
+  {years.length>1&&<div className="chips">{years.map(v=><button key={v} className={'chip'+(v===yr?' on':'')} onClick={()=>setYr(v)}>{v}</button>)}</div>}
+  <div className="statGrid"><div className="stat"><b>{inYear.length}</b><span>אירועים</span></div><div className="stat"><b>{past}</b><span>היו</span></div><div className="stat"><b>{inYear.length-past}</b><span>בדרך</span></div></div>
+  {spent>0&&<div className="box"><h3><Wallet/>הוצאות על כרטיסים</h3><div className="moneyBig"><b dir="ltr">₪{Math.round(spent).toLocaleString('he-IL')}</b></div></div>}
+  {kinds.length>0&&<div className="box"><h3><TicketIcon/>לפי סוג</h3>{kinds.map(([k,n])=>{const K=KIND[k as Kind];return <div className="kindRow" key={k}><span><K.Icon size={16}/>{K.label}</span><i style={{width:(n/max*100)+'%'}}/><b>{n}</b></div>;})}</div>}
+  {venues.length>0&&<div className="box"><h3><MapPin/>המקומות שלך</h3>{venues.map(([v,n])=><div className="kv" key={v}><span style={{whiteSpace:'normal'}}>{bidi(v)}</span><b style={{color:'var(--ink)'}}>{n}</b></div>)}</div>}
+  {!inYear.length&&<div className="panel"><ChartColumn size={40}/><h2>עוד אין נתונים</h2><p>אחרי שיהיו כרטיסים, יופיע כאן סיכום.</p></div>}</>;}

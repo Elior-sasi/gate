@@ -19,5 +19,5 @@ export async function GET(req:NextRequest){
   const loc=[t.venue,t.address,t.city].filter(Boolean).join(', ');const desc=[t.seats.length&&'מקומות: '+t.seats.join('; '),t.doors&&'פתיחת דלתות: '+t.doors,t.order&&'מספר הזמנה: '+t.order,'הכרטיס: https://gatetickets.vercel.app/?t='+encodeURIComponent(t.key)].filter(Boolean).join('\n');
   ev.push('BEGIN:VEVENT','UID:'+t.key.replace(/[^\w:.-]/g,'')+'@gate','DTSTAMP:'+stamp,...when,'SUMMARY:'+esc((ICON[t.kind]||'🎟️')+' '+t.title),...(loc?['LOCATION:'+esc(loc)]:[]),'DESCRIPTION:'+esc(desc),
    ...(m[4]?['BEGIN:VALARM','ACTION:DISPLAY','DESCRIPTION:'+esc(t.title),'TRIGGER:-PT2H','END:VALARM']:[]),'END:VEVENT');}
- const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Gate//HE','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Gate · אירועים','X-WR-TIMEZONE:Asia/Jerusalem','REFRESH-INTERVAL;VALUE=DURATION:PT1H','X-PUBLISHED-TTL:PT1H',...TZ,...ev,'END:VCALENDAR'];
+ const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Unstage//HE','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Unstage · אירועים','X-WR-TIMEZONE:Asia/Jerusalem','REFRESH-INTERVAL;VALUE=DURATION:PT1H','X-PUBLISHED-TTL:PT1H',...TZ,...ev,'END:VCALENDAR'];
  return new Response(lines.map(fold).join('\r\n')+'\r\n',{headers:{'Content-Type':'text/calendar; charset=utf-8','Cache-Control':'no-store'}});}
