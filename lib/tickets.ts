@@ -36,6 +36,7 @@ export function seatsIn(text:string){const out:string[]=[];
  return out.slice(0,12);}
 const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?(?:הזמנה|רכישה)|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
 export function cleanTitle(s:string){let t=s.replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
+export function kindOf(subject:string,text:string):Kind{const k=guessKind(subject);if(k!=='other')return k;const b=guessKind(text.slice(0,1500));return b==='lecture'?'other':b;}
 export function guessKind(t:string):Kind{
  // Cinematheques also host talks: a lecture is a lecture even when it is at a cinema.
  if(/הרצא|מרצה|lecture|talk\b|שיחה עם|מפגש עם|רב.?שיח|סדנ|workshop|סמינר|כנס/i.test(t))return 'lecture';
@@ -55,6 +56,7 @@ const NOT_PURCHASE=/החזר כספי|refund|טופס|forms|צפייה בפרט�
 const domainOf=(from:string)=>(from.match(/@([\w.-]+)>?\s*$/)?.[1]||'').toLowerCase();
 const addr=(h:string)=>(h.match(/[\w.+-]+@[\w.-]+/)?.[0]||'').toLowerCase();
 // Strong enough to be a purchase: from a ticket seller, or titled like a purchase - and not marketing, mail to yourself, or a card/forms notice.
+export const fromSeller=(m:Message)=>{const d=domainOf(header(m,'from'));return SELLERS.test(d)||d.split('.').some(x=>/^(?:tickets?|tix|cinema|kupat)$/.test(x));};
 export function looksLikePurchase(m:Message){const subject=header(m,'subject'),from=header(m,'from');
  if(MARKETING.test(subject)||NOT_PURCHASE.test(subject))return false;
  if(addr(from)&&addr(from)===addr(header(m,'to')))return false;
@@ -66,7 +68,8 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
  if(!TICKETISH.test(all)||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
  const start=eventStart(text,mailed)||eventStart(subject,mailed);if(!start)return null;
  const title=cleanTitle(subject);const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
- return {key:'',msgs:[m.id],thread:m.threadId,title,kind:guessKind(all),start,
+ if(!fromSeller(m)&&!files.length&&!seatsIn(text).length&&!/כרטיס|ticket|הופעה|הצגה|הקרנה|מופע|כנס|הרצאה/i.test(subject))return null;
+ return {key:'',msgs:[m.id],thread:m.threadId,title,kind:kindOf(subject,text),start,
   doors:pick(text,/(?:פתיחת (?:דלתות|שערים)|doors open)\s*[:\-]?\s*(\d{1,2}:\d{2})/i)||undefined,
   venue:pick(text,/(?:^|\n)\s*(?:מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location)\s*[:\-]\s*([^\n]{3,80})/i)||undefined,
   address:pick(text,/(?:^|\n)\s*(?:כתובת|address)\s*[:\-]\s*([^\n]{4,80})/i)||undefined,
@@ -96,7 +99,7 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  let j:Record<string,any>;try{j=JSON.parse(r.text);}catch{return {ok:false};}
  if(!j.isTicket||!/^\d{4}-\d{2}-\d{2}/.test(String(j.start||'')))return {ok:true,ticket:null};
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;
- return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:guessKind(subject+text)) as Kind,
+ return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,
   start:String(j.start).slice(0,16),doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
   order:s(j.order),provider:s(j.provider),price:s(j.price),files:ticketFiles(m).map(f=>({...f,msg:m.id})),links:ticketLinks(m),mailed,ai:true,cancelled:!!j.cancelled}};}
 export type Read={ticket:Ticket|null;retry:boolean};

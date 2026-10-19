@@ -28,13 +28,16 @@ const fileUrl=(f:TFile)=>'/api/file?'+new URLSearchParams({m:f.msg,a:f.id,n:f.na
 const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:/image/.test(f.type)?QrCode:FileText;
 const fileLabel=(f:TFile,i:number,n:number)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):'כרטיס'+(n>1?' '+(i+1):'');
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":-]*[A-Za-z0-9)]/g,m=>'⁦'+m+'⁩');
-const KEY=(u:string)=>'gate:v3:'+u;const HID=(u:string)=>'gate:hidden:'+u;
+const KEY=(u:string)=>'gate:v4:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
-function mergeAll(a:Ticket[],b:Ticket[]){const by=new Map(a.map(t=>[t.key,t]));
- for(const t of b){const o=by.get(t.key);if(!o){by.set(t.key,t);continue;}
-  by.set(t.key,{...o,...(t.ai||!o.ai?t:{}),msgs:[...new Set([...o.msgs,...t.msgs])],seats:[...new Set([...o.seats,...t.seats])],files:[...o.files,...t.files.filter(f=>!o.files.some(g=>g.id===f.id))],links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))],cancelled:o.cancelled||t.cancelled,mailed:Math.max(o.mailed,t.mailed)});}
- return [...by.values()];}
+// A newer reading of the same mail (Gemini after the rules) replaces the old card, and two mails about one event become one card.
+const same=(a:Ticket,b:Ticket)=>a.key===b.key||a.msgs.some(m=>b.msgs.includes(m))||(a.start===b.start&&a.start.includes('T')&&a.title.replace(/\s+/g,'')===b.title.replace(/\s+/g,''));
+function join(o:Ticket,t:Ticket):Ticket{const best=t.ai&&!o.ai?t:o.ai&&!t.ai?o:t;
+ return {...best,msgs:[...new Set([...o.msgs,...t.msgs])],seats:best.seats.length?best.seats:[...new Set([...o.seats,...t.seats])],files:[...o.files,...t.files.filter(f=>!o.files.some(g=>g.id===f.id))],links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))],cancelled:o.cancelled||t.cancelled,mailed:Math.max(o.mailed,t.mailed)};}
+function mergeAll(a:Ticket[],b:Ticket[]){let out=[...a];
+ for(const t of b){const hits=out.filter(o=>same(o,t));out=out.filter(o=>!hits.includes(o));out.push(hits.reduce((acc,o)=>join(o,acc),t));}
+ return out;}
 function addToCalendar(t:Ticket){const f=document.createElement('form');f.method='POST';f.action='/api/ics';
  const v:Record<string,string>={start:t.start,title:t.title,venue:t.venue||'',address:t.address||'',city:t.city||'',seats:t.seats.join('; '),doors:t.doors||'',order:t.order||'',provider:t.provider||'',hours:t.kind==='movie'?'2':'3'};
  for(const [k,val] of Object.entries(v)){const i=document.createElement('input');i.type='hidden';i.name=k;i.value=val;f.appendChild(i);}document.body.appendChild(f);f.submit();f.remove();}
@@ -51,11 +54,13 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
    const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
    const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));let cur=base;setProg([0,todo.length]);
-   const batches:string[][]=[];for(let i=0;i<todo.length;i+=8)batches.push(todo.slice(i,i+8));let done=0;
+   const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=6)o.push(l.slice(i,i+6));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
    const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b})});const d=await res.json();
      if(!res.ok){if(res.status===401||res.status===403)throw new Error(d.error);continue;}
-     cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);done+=b.length;setProg([done,todo.length]);}};
-   await Promise.all([worker(),worker(),worker()]);
+     cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)setProg([done,todo.length]);}second=true;};
+   await worker();
+   // Mail Gemini could not read yet (busy) is tried again once after a short pause.
+   if(retryIds.length){await new Promise(r=>setTimeout(r,25000));batches.push(...chunk(retryIds.splice(0)));await worker();}
    cur={...cur,updated:new Date().toISOString()};setStore(cur);save(KEY(user.id),cur);
   }catch(e){setErr(e instanceof Error?e.message:'הסריקה נכשלה');}
   finally{running.current=false;setBusy(false);setProg(null);}},[user]);

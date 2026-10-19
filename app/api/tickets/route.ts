@@ -22,7 +22,8 @@ export async function POST(req:NextRequest){
  try{const {accessToken}=await identity(req);const gmail=gmailClient(accessToken);const {ids}=body.parse(await req.json());
   const got=await Promise.allSettled(ids.map(id=>gmail('messages/'+encodeURIComponent(id)+'?format=full') as Promise<Message>));
   const tickets:Ticket[]=[];const read:string[]=[];const retry:string[]=[];
-  await Promise.all(got.map(async(g,i)=>{if(g.status==='rejected'){if(g.reason instanceof GmailError&&!['GMAIL','RATE'].includes(g.reason.message))throw g.reason;retry.push(ids[i]);return;}
-   const r=await readTicket(g.value).catch(()=>({ticket:null,retry:true}));if(r.ticket)tickets.push(r.ticket);(r.retry?retry:read).push(ids[i]);}));
+  // One message at a time: the Gemini free tier allows only a few calls a minute.
+  for(const [i,g] of got.entries())await (async()=>{if(g.status==='rejected'){if(g.reason instanceof GmailError&&!['GMAIL','RATE'].includes(g.reason.message))throw g.reason;retry.push(ids[i]);return;}
+   const r=await readTicket(g.value).catch(()=>({ticket:null,retry:true}));if(r.ticket)tickets.push(r.ticket);(r.retry?retry:read).push(ids[i]);})();
   return Response.json({tickets:mergeTickets(tickets),read,retry},{headers:H});
  }catch(e){return fail(e);}}
