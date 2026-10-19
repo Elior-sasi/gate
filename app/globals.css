@@ -111,3 +111,27 @@ nav button svg{width:22px;height:22px}nav button.selected{color:var(--acc-text)}
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){nav{background:#1d2836f5}}
 @media(max-width:360px){.app{padding-inline:12px}.date{width:62px;height:72px}h1{font-size:calc(28px*var(--fs))}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Unbox-style motion: opening screen, loading mark, pull to refresh, tab slide, cards arriving */
+.splash{position:fixed;inset:0;z-index:2147483000;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity .4s ease}
+.splash.out{opacity:0;pointer-events:none}
+.smark{width:118px;height:auto;overflow:visible}
+.sname{font-size:34px;font-weight:700;letter-spacing:-.3px;color:#eaf4ff;animation:sin .6s .55s ease-out both}
+@keyframes sin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.mark .tk{transform-box:view-box}
+.mark.draw .ring{stroke-dasharray:100;animation:gdraw .85s cubic-bezier(.6,0,.2,1) both}
+@keyframes gdraw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
+.mark.draw .tk{animation:tkin .6s .65s cubic-bezier(.2,.9,.3,1.25) both}
+@keyframes tkin{from{transform:translateX(140px) rotate(8deg);opacity:0}to{transform:none;opacity:1}}
+.mark.bob .tk{animation:tkbob 1.6s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes tkbob{0%,100%{transform:translateX(0)}50%{transform:translateX(64px) rotate(-6deg)}}
+.loader{display:flex;flex-direction:column;align-items:center;gap:18px;padding:56px 0 40px;color:var(--mut);font-size:calc(17px*var(--fs))}
+.lmark{width:104px;height:auto;overflow:visible;animation:lbob 1.6s ease-in-out infinite}
+@keyframes lbob{0%,100%{transform:translateY(0)}50%{transform:translateY(6px)}}
+.ptr{position:fixed;top:calc(4px + env(safe-area-inset-top));left:50%;z-index:25;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--acc-soft);border:1px solid var(--acc-edge);color:var(--acc-text);box-shadow:0 6px 18px #0008;transition:opacity .15s}
+.ptr svg{width:22px;height:22px}.ptr.ready{background:var(--acc);color:var(--acc-ink);border-color:var(--acc2)}
+nav.dragging:before{transition:none}
+.list>.card{animation:cardIn .38s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0)*45ms)}
+@keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.nextCard{animation:cardIn .45s cubic-bezier(.2,.8,.2,1) both}
+@media(prefers-reduced-motion:reduce){.splash{display:none}}

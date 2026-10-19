@@ -42,7 +42,9 @@ function addToCalendar(t:Ticket){const f=document.createElement('form');f.method
  const v:Record<string,string>={start:t.start,title:t.title,venue:t.venue||'',address:t.address||'',city:t.city||'',seats:t.seats.join('; '),doors:t.doors||'',order:t.order||'',provider:t.provider||'',hours:t.kind==='movie'?'2':'3'};
  for(const [k,val] of Object.entries(v)){const i=document.createElement('input');i.type='hidden';i.name=k;i.value=val;f.appendChild(i);}document.body.appendChild(f);f.submit();f.remove();}
 // The G of "Gate": a gold ring whose bar is a ticket with a tear line (same idea as the U of Unbox).
-function Logo(){return <svg viewBox="118 140 282 272" aria-hidden="true"><defs><linearGradient id="lg" gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="150"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id="lm"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="262" cy="276" r="16" fill="#000"/><circle cx="398" cy="276" r="16" fill="#000"/></mask></defs><path d="M331 201 A106 106 0 1 0 362 276" fill="none" stroke="url(#lg)" strokeWidth="58" strokeLinecap="round"/><rect x="262" y="246" width="136" height="60" rx="14" fill="#ffd27a" mask="url(#lm)"/><line x1="352" y1="256" x2="352" y2="296" stroke="var(--bg)" strokeWidth="6" strokeDasharray="3 9" strokeLinecap="round"/></svg>;}
+// anim "draw": the ring draws itself and the ticket slides in (opening screen); "bob": the ticket slides in and out (loading).
+function Mark({cls,anim}:{cls?:string;anim?:'draw'|'bob'}){const id=anim||'s';return <svg className={'mark'+(anim?' '+anim:'')+(cls?' '+cls:'')} viewBox="118 140 282 272" aria-hidden="true"><defs><linearGradient id={'lg'+id} gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="150"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id={'lm'+id} maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="262" cy="276" r="16" fill="#000"/><circle cx="398" cy="276" r="16" fill="#000"/></mask></defs><path className="ring" pathLength="100" d="M331 201 A106 106 0 1 0 362 276" fill="none" stroke={'url(#lg'+id+')'} strokeWidth="58" strokeLinecap="round"/><g className="tk"><rect x="262" y="246" width="136" height="60" rx="14" fill="#ffd27a" mask={'url(#lm'+id+')'}/><line x1="352" y1="256" x2="352" y2="296" stroke="var(--bg)" strokeWidth="6" strokeDasharray="3 9" strokeLinecap="round"/></g></svg>;}
+const Logo=()=><Mark/>;
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
  const [tab,setTab]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
@@ -65,6 +67,27 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   }catch(e){setErr(e instanceof Error?e.message:'הסריקה נכשלה');}
   finally{running.current=false;setBusy(false);setProg(null);}},[user]);
  useEffect(()=>{if(ready&&gmail&&user?.id!=='demo')scan();},[ready,gmail,scan,user]);
+ // Opening screen, like Unbox: the G draws itself, then fades into the app.
+ const [splash,setSplash]=useState<'on'|'out'|'off'>('on');
+ useEffect(()=>{const a=setTimeout(()=>setSplash('out'),1500),b=setTimeout(()=>setSplash('off'),1900);return()=>{clearTimeout(a);clearTimeout(b);};},[]);
+ // After a new deploy the open app reloads itself (at most once a minute).
+ useEffect(()=>{const mine=process.env.NEXT_PUBLIC_BUILD;if(!mine)return;const check=()=>{if(document.visibilityState!=='visible')return;fetch('/api/version',{cache:'no-store'}).then(r=>r.json()).then(d=>{if(d.build&&d.build!==mine){let last=0;try{last=+(sessionStorage.getItem('gate_reload')||0);}catch{}if(Date.now()-last>60000){try{sessionStorage.setItem('gate_reload',String(Date.now()));}catch{}setSplash('on');setTimeout(()=>location.reload(),60);}}}).catch(()=>{});};check();document.addEventListener('visibilitychange',check);return()=>document.removeEventListener('visibilitychange',check);},[]);
+ // Coming back to the app after a while checks the mail again.
+ const scanRef=useRef(scan);scanRef.current=scan;const lastScan=useRef(Date.now());
+ useEffect(()=>{if(!user||!gmail)return;const onShow=()=>{if(document.visibilityState==='visible'&&Date.now()-lastScan.current>60000){lastScan.current=Date.now();void scanRef.current();}};document.addEventListener('visibilitychange',onShow);window.addEventListener('pageshow',onShow);return()=>{document.removeEventListener('visibilitychange',onShow);window.removeEventListener('pageshow',onShow);};},[user,gmail]);
+ // Pull down at the top to refresh.
+ const [pull,setPull]=useState(0);const pullStart=useRef<number|null>(null);const pullRef=useRef(0);
+ useEffect(()=>{if(!user)return;const PULL=80;
+  const start=(e:TouchEvent)=>{pullStart.current=window.scrollY<=0?e.touches[0].clientY:null;};
+  const move=(e:TouchEvent)=>{if(pullStart.current===null)return;const dy=e.touches[0].clientY-pullStart.current;if(dy<=0||window.scrollY>0){pullRef.current=0;setPull(0);return;}pullRef.current=Math.min(130,dy*.55);setPull(pullRef.current);};
+  const end=()=>{if(pullStart.current!==null&&pullRef.current>=PULL&&!running.current){lastScan.current=Date.now();void scanRef.current();}pullStart.current=null;pullRef.current=0;setPull(0);};
+  window.addEventListener('touchstart',start,{passive:true});window.addEventListener('touchmove',move,{passive:true});window.addEventListener('touchend',end);window.addEventListener('touchcancel',end);
+  return()=>{window.removeEventListener('touchstart',start);window.removeEventListener('touchmove',move);window.removeEventListener('touchend',end);window.removeEventListener('touchcancel',end);};},[user]);
+ // Slide a finger along the tab bar to switch tabs.
+ const [navDrag,setNavDrag]=useState<number|null>(null);
+ function navSlide(e:React.TouchEvent<HTMLElement>,moving:boolean){const r=e.currentTarget.getBoundingClientRect();const x=e.touches[0]?.clientX;if(x===undefined)return;
+  const pos=Math.min(2,Math.max(0,(r.right-x)/(r.width/3)-0.5));if(!moving){setNavDrag(null);return;}setNavDrag(pos);const t=Math.round(pos);if(t!==tab){setTab(t);setOpen(null);}}
+ const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Gate</div></div>;
  const visible=useMemo(()=>{const s=q.trim().toLowerCase();return store.tickets.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[store,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
  const past=useMemo(()=>visible.filter(t=>!upcoming(t)).sort((a,b)=>when(b).getTime()-when(a).getTime()),[visible]);
@@ -73,11 +96,13 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  useEffect(()=>{const back=()=>setOpen(null);if(open){history.pushState({sheet:1},'');addEventListener('popstate',back);return ()=>removeEventListener('popstate',back);}},[open]);
  const close=()=>{if(history.state?.sheet)history.back();else setOpen(null);};
  const hide=(k:string)=>{if(!user)return;const h=[...hidden,k];setHidden(h);save(HID(user.id),h);close();say('האירוע הוסתר');};
- if(!configured)return <main className="app"><Header/><div className="panel"><TicketIcon size={40}/><h2>Gate עוד לא מחובר</h2><p>חסרים מפתחות ב-Vercel (AUTH_GOOGLE_SECRET, AUTH_SECRET).</p></div></main>;
- if(!user)return <main className="app"><Header/><h1>הכרטיסים שלך,<br/>במקום אחד</h1><p className="sub">Gate קורא את מיילי הכרטיסים ב-Gmail ומסדר כל הופעה, הצגה וסרט בכרטיס אחד - עם התאריך, המקום, הכיסאות והברקוד לכניסה.</p>
+ if(!configured)return <main className="app">{splashEl}<Header/><div className="panel"><TicketIcon size={40}/><h2>Gate עוד לא מחובר</h2><p>חסרים מפתחות ב-Vercel (AUTH_GOOGLE_SECRET, AUTH_SECRET).</p></div></main>;
+ if(!user)return <main className="app">{splashEl}<Header/><h1>הכרטיסים שלך,<br/>במקום אחד</h1><p className="sub">Gate קורא את מיילי הכרטיסים ב-Gmail ומסדר כל הופעה, הצגה וסרט בכרטיס אחד - עם התאריך, המקום, הכיסאות והברקוד לכניסה.</p>
   <form action={login}><button className="primary"><Mail size={20}/>כניסה עם Google</button></form><p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. הכרטיסים נשמרים רק בטלפון שלך.</p></main>;
  const list=tab===0?next:past;
  return <main className={'app'+(sel?' detailOn':'')}>
+  {splashEl}
+  {pull>0&&!sel&&<div className={'ptr'+(pull>=80?' ready':'')} style={{transform:'translate(-50%,'+Math.max(0,pull-46)+'px)',opacity:Math.min(1,pull/80)}} aria-hidden="true"><RefreshCw style={{transform:'rotate('+pull*3+'deg)'}}/></div>}
   <Header actions={<button className="ib" onClick={()=>scan()} disabled={busy} aria-label="סריקה מחדש"><RefreshCw className={busy?'spin':''}/></button>}/>
   {!gmail&&<div className="error"><span>נכנסת עם Google, אבל לא אישרת קריאת Gmail.</span><form action={login}><button className="ghost">חידוש הרשאה</button></form></div>}
   {err&&<div className="error"><span>{err}</span><button className="ghost" onClick={()=>scan()}>נסה שוב</button></div>}
@@ -87,15 +112,15 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
    <label className="search"><Search size={20}/><span className="sr">חיפוש</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="חיפוש אירוע, מקום או מוכר"/></label>
    {tab===0&&hero&&!q&&<Hero t={hero} onOpen={()=>setOpen(hero.key)}/>}
    {(()=>{const rest=tab===0&&hero&&!q?list.filter(t=>t.key!==hero.key):list;
-    if(!rest.length&&!(tab===0&&hero&&!q))return busy&&!store.tickets.length?<div className="list">{[0,1,2].map(i=><div key={i} className="card skel"><div className="c"><div className="date"/><div className="info"><i/><i/></div></div></div>)}</div>
+    if(!rest.length&&!(tab===0&&hero&&!q))return busy&&!store.tickets.length?<div className="loader" role="status"><Mark cls="lmark" anim="bob"/><p>{prog&&prog[1]?'מחפש כרטיסים במיילים…':'בודק את Gmail…'}</p></div>
      :<div className="panel">{tab===0?<CalendarDays size={40}/>:<History size={40}/>}<h2>{q?'לא נמצא':tab===0?'אין אירועים קרובים':'עוד אין אירועים שהיו'}</h2><p>{q?'נסה מילה אחרת.':tab===0?'כשתקנה כרטיסים, הם יופיעו כאן לבד.':'אירועים שעברו יעברו לכאן.'}</p></div>;
-    return <>{tab===0&&hero&&!q&&rest.length>0&&<div className="listH">בהמשך</div>}<div className="list">{rest.map(t=><Card key={t.key} t={t} onOpen={()=>setOpen(t.key)}/>)}</div></>;})()}
+    return <>{tab===0&&hero&&!q&&rest.length>0&&<div className="listH">בהמשך</div>}<div className="list">{rest.map((t,i)=><Card key={t.key} t={t} i={i} onOpen={()=>setOpen(t.key)}/>)}</div></>;})()}
    {store.updated&&<p className="footnote">עודכן {new Date(store.updated).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}</p>}
   </>}
   {tab===2&&<SettingsView user={user} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
   {sel&&<Sheet t={sel} onClose={close} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
   {toast&&<div className="toast" role="status">{toast}</div>}
-  {!sel&&<nav style={{['--tab' as string]:tab}} aria-label="ניווט">{[['קרובים',CalendarDays],['היו',History],['הגדרות',Settings]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
+  {!sel&&<nav className={navDrag!==null?'dragging':''} style={{['--tab' as string]:navDrag??tab}} aria-label="ניווט" onTouchStart={e=>navSlide(e,false)} onTouchMove={e=>navSlide(e,true)} onTouchEnd={()=>setNavDrag(null)} onTouchCancel={()=>setNavDrag(null)}>{[['קרובים',CalendarDays],['היו',History],['הגדרות',Settings]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
  </main>;}
 function Header({actions}:{actions?:React.ReactNode}){return <header className="top row"><span className="brand" dir="ltr" aria-label="Gate"><Logo/><span aria-hidden="true">ate</span></span><div className="actions">{actions}</div></header>;}
 function Hero({t,onOpen}:{t:Ticket;onOpen:()=>void}){const [n,u]=countdown(t);const K=KIND[t.kind];
@@ -106,8 +131,8 @@ function Hero({t,onOpen}:{t:Ticket;onOpen:()=>void}){const [n,u]=countdown(t);co
   <div className="nc-chips"><span><CalendarDays/>{longDate(t)}</span>{timed(t)&&<span><Clock/>{time(t)}</span>}{place(t)&&<span><MapPin/>{bidi(place(t))}</span>}{t.seats.length>0&&<span><Armchair/>{t.seats.length===1?t.seats[0]:t.seats.length+' מקומות'}</span>}</div>
   {t.files.length>0&&<div className="nc-go"><QrCode size={20}/>הצג כרטיס</div>}
  </button>;}
-function Card({t,onOpen}:{t:Ticket;onOpen:()=>void}){const d=when(t);const n=daysTo(t);const K=KIND[t.kind];
- return <button className={'card'+(n<0?' past':'')+(t.cancelled?' cx':'')} onClick={onOpen}><div className="c">
+function Card({t,i=0,onOpen}:{t:Ticket;i?:number;onOpen:()=>void}){const d=when(t);const n=daysTo(t);const K=KIND[t.kind];
+ return <button className={'card'+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} onClick={onOpen}><div className="c">
   <div className={'date'+(n===0?' today':'')}><small>{n===0?'היום':DAY_SHORT[d.getDay()]}</small><b>{d.getDate()}</b><span>{MON_SHORT[d.getMonth()]}{d.getFullYear()!==new Date().getFullYear()?' '+String(d.getFullYear()).slice(2):''}</span></div>
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><MapPin/><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className="pill"><K.Icon/>{K.label}</span>}{timed(t)&&<span className="pill soft">{time(t)}</span>}
