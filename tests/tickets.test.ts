@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {eventStart,seatsIn,cleanTitle,guessKind,ruleTicket,mergeTickets,withKey} from '@/lib/tickets';
+import {eventStart,seatsIn,cleanTitle,guessKind,ruleTicket,mergeTickets,withKey,looksLikePurchase} from '@/lib/tickets';
 const sent=new Date(2026,9,1,10).getTime();
 const mail=(subject:string,text:string,from='לאן <noreply@leaan.co.il>')=>({id:'abc123',threadId:'t1',internalDate:String(sent),payload:{mimeType:'text/plain',headers:[{name:'Subject',value:subject},{name:'From',value:from}],body:{data:Buffer.from(text).toString('base64url')}}});
 test('event date with time, not the order date',()=>{
@@ -17,3 +17,14 @@ test('rule ticket from a mail',()=>{const t=ruleTicket(mail('הכרטיסים ש
 test('not tickets',()=>{assert.equal(ruleTicket(mail('ההזמנה שלך נשלחה','משלוח בדרך 05/11/2026') as never,'משלוח בדרך 05/11/2026'),null);});
 test('merge by order number',()=>{const a=withKey({key:'',msgs:['1'],thread:'t',title:'A',kind:'concert',start:'2026-11-05',seats:[],files:[],links:[],mailed:1,order:'884512'});const b=withKey({...a,msgs:['2'],start:'2026-11-05T20:30',seats:['שורה 1, כיסא 2'],mailed:2});
  const m=mergeTickets([a,b]);assert.equal(m.length,1);assert.equal(m[0].start,'2026-11-05T20:30');assert.deepEqual(m[0].msgs,['1','2']);});
+test('marketing and self mail are not tickets',()=>{
+ const m=(subject:string,from:string,to='me@gmail.com')=>({id:'x123456',threadId:'t',internalDate:String(sent),payload:{headers:[{name:'Subject',value:subject},{name:'From',value:from},{name:'To',value:to}]}}) as never;
+ assert.equal(looksLikePurchase(m('עדכון שבועי מס\' 145 על עולם הAI (תוכן שיווקי)','AI <news@ai.co.il>')),false);
+ assert.equal(looksLikePurchase(m('ספר חדש במחיר מיוחד | פרסומת','כנרת <a@kinneret.co.il>')),false);
+ assert.equal(looksLikePurchase(m('עולם המשאלות SRT','me <me@gmail.com>')),false);
+ assert.equal(looksLikePurchase(m('התראה בנושא צפייה בפרטי כרטיס','max <info@max-finance.co.il>')),false);
+ assert.equal(looksLikePurchase(m('סינמה סיטי ירושלים - אישור הזמנה','Cinema City <noreply@cinema-city.co.il>')),true);
+ assert.equal(looksLikePurchase(m('AnimeFest 07.11','GO-OUT <tickets@go-out.co>')),true);
+ assert.equal(looksLikePurchase(m('הזמנה חדשה','Planet <noreply@planetcinema.co.il>')),true);
+ assert.equal(cleanTitle('סינמטק ירושלים - אישור הזמנה'),'סינמטק ירושלים');
+ assert.equal(cleanTitle('אישור רכישה - FRIENDS רשת מועדוני תרבות (מס״ד: 1571809 הזמנה: 55'),'FRIENDS רשת מועדוני תרבות');});

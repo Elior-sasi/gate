@@ -22,7 +22,7 @@ const TIME=/(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)/g;
 // The event moment: the first date that has a time close to it, and is not before the mail was sent.
 export function eventStart(text:string,mailed:number){const sent=new Date(mailed);const floor=new Date(sent.getFullYear(),sent.getMonth(),sent.getDate()).getTime();
  const cand=datesIn(text).map(c=>{let y=c.y;if(!y){y=sent.getFullYear();if(new Date(y,c.m-1,c.d).getTime()<floor)y++;}
-  const before=text.slice(Math.max(0,c.at-30),c.at);const near=text.slice(Math.max(0,c.at-14),c.at+50).split('\n').slice(0,2).join(' ');const t=[...near.matchAll(TIME)].find(t=>!/^0?0:00$/.test(t[0]));
+  const before=text.slice(Math.max(0,c.at-30),c.at);const near=text.slice(Math.max(0,c.at-14),c.at+90).split('\n').slice(0,3).join(' ');const t=[...near.matchAll(TIME)].find(t=>!/^0?0:00$/.test(t[0]));
   const bought=/(?:הזמנ|רכיש|נרכש|הונפק|תשלום|purchase|order(?:ed)? date|issued|booked on)[^\n]{0,20}$/i.test(before);
   return {y,m:c.m,d:c.d,t:t?pad(+t[1])+':'+t[2]:'',bought,when:new Date(y,c.m-1,c.d).getTime()};}).filter(c=>c.when>=floor-864e5);
  const real=cand.filter(c=>!c.bought);const pool=real.length?real:cand;
@@ -34,8 +34,8 @@ export function seatsIn(text:string){const out:string[]=[];
  for(const x of text.matchAll(/(?:(?:אזור|יציע|גוש|section|block)\s*[:\-]?\s*([\w֐-׿'-]{1,12})[\s,|]*)?(?:שורה|row)\s*[:\-]?\s*(\w{1,4})[\s,|]*(?:כי?סא|מושב|מקום|seat)\s*[:\-]?\s*(\d{1,4})/gi)){
   const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+x[3];if(!out.includes(s))out.push(s);}
  return out.slice(0,12);}
-const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?הזמנה|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
-export function cleanTitle(s:string){let t=s;for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
+const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?(?:הזמנה|רכישה)|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
+export function cleanTitle(s:string){let t=s.replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
 export function guessKind(t:string):Kind{
  if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|פלאנט|planet/i.test(t))return 'movie';
  if(/סטנד.?אפ|stand.?up|קומי/i.test(t))return 'standup';
@@ -45,11 +45,23 @@ export function guessKind(t:string):Kind{
  if(/הופעה|הופעת|קונצרט|concert|live|tour|בארבי|זאפה|פילהרמונית|מופע/i.test(t))return 'concert';
  return 'other';}
 const TICKETISH=/כרטיס|ticket|הזמנת מקומות|שורה|row|מושב|seat|הופעה|הצגה|הקרנה|מופע|כניסה|פתיחת דלתות|doors|admission|e-?ticket|ברקוד|barcode|qr/i;
+// Who sells tickets (sender domain) and how a purchase mail is titled. A ticket needs one of the two, so newsletters that merely mention a date are left out.
+export const SELLERS=/(?:leaan|eventim|tixwise|zappa-club|barby|eventer|smarticket|tickchak|go-out|bimot|hatarbut|kupat|habima|cameri|gesher-theatre|beitlessin|israel-opera|ipo|tmu-na|hasimta|cinema-city|yesplanet|planetcinema|lev|hotcinema|rav-hen|globusmax|cinema|jer-cin|cinematheque|eventbuzz|ticketmaster|eventbrite|dice|seetickets|livenation|axs|stubhub|viagogo|tickets|mytickets|tix|ticketsi)\.(?:co\.il|org\.il|com|co|fm|il|org|co\.uk)$/i;
+const PURCHASE=/אישור (?:ה)?(?:הזמנה|רכישה)|הזמנת(?:ך)? (?:כרטיסים|מקומות)|הכרטיס(?:ים)? שלך|הכרטיסים (?:ל|עבור)|כרטיס(?:ים)? (?:ל|עבור)(?:הופעה|הצגה|סרט|אירוע)|your (?:e-?)?tickets?|tickets? (?:for|confirmation)|booking confirm|order confirm|e-?ticket|purchase confirm/i;
+const MARKETING=/פרסומת|שיווקי|ניוזלטר|newsletter|עדכון שבועי|עדכוני |מבצע|המלצות|הנחה|במחיר מיוחד|כרטיסים אחרונים|sale\b|promo/i;
+const NOT_PURCHASE=/החזר כספי|refund|טופס|forms|צפייה בפרטי כרטיס|כרטיס (?:אשראי|האשראי)|credit card/i;
+const domainOf=(from:string)=>(from.match(/@([\w.-]+)>?\s*$/)?.[1]||'').toLowerCase();
+const addr=(h:string)=>(h.match(/[\w.+-]+@[\w.-]+/)?.[0]||'').toLowerCase();
+// Strong enough to be a purchase: from a ticket seller, or titled like a purchase - and not marketing, mail to yourself, or a card/forms notice.
+export function looksLikePurchase(m:Message){const subject=header(m,'subject'),from=header(m,'from');
+ if(MARKETING.test(subject)||NOT_PURCHASE.test(subject))return false;
+ if(addr(from)&&addr(from)===addr(header(m,'to')))return false;
+ const d=domainOf(from);return SELLERS.test(d)||d.split('.').some(x=>/^(?:tickets?|tix|cinema|kupat)$/.test(x))||PURCHASE.test(subject);}
 const NOT_TICKET=/טיסה|flight|boarding pass|מלון|hotel|booking\.com|airbnb|השכרת רכב|רכבת ישראל|משלוח|shipped|parcel|חבילה|קבלה על תרומה|newsletter|ניוזלטר/i;
 // Rule-based reading, used without a Gemini key and as the fallback when Gemini is busy.
 export function ruleTicket(m:Message,text:string):Ticket|null{
  const subject=header(m,'subject');const mailed=+(m.internalDate||Date.now());const all=subject+'\n'+text;
- if(!TICKETISH.test(all)||NOT_TICKET.test(subject))return null;
+ if(!TICKETISH.test(all)||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
  const start=eventStart(text,mailed)||eventStart(subject,mailed);if(!start)return null;
  const title=cleanTitle(subject);const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
  return {key:'',msgs:[m.id],thread:m.threadId,title,kind:guessKind(all),start,
@@ -89,7 +101,7 @@ export type Read={ticket:Ticket|null;retry:boolean};
 export async function readTicket(m:Message):Promise<Read>{
  const text=bodyText(m);const rule=ruleTicket(m,text);
  // Mail with no ticket words at all is skipped without spending a Gemini call.
- if(!TICKETISH.test(header(m,'subject')+'\n'+text))return {ticket:null,retry:false};
+ if(!TICKETISH.test(header(m,'subject')+'\n'+text)||!looksLikePurchase(m))return {ticket:null,retry:false};
  const ai=await aiTicket(m,text);
  if(ai.ok)return {ticket:ai.ticket?withKey(ai.ticket):null,retry:false};
  // Gemini busy or off: keep what the rules found, and read the mail again next time if a key is set.
