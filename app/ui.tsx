@@ -68,7 +68,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  useEffect(()=>{const back=()=>setOpen(null);if(open){history.pushState({sheet:1},'');addEventListener('popstate',back);return ()=>removeEventListener('popstate',back);}},[open]);
  const close=()=>{if(history.state?.sheet)history.back();else setOpen(null);};
  const hide=(k:string)=>{if(!user)return;const h=[...hidden,k];setHidden(h);save(HID(user.id),h);close();say('האירוע הוסתר');};
- if(!configured)return <main className="app"><Header/><div className="panel"><TicketIcon size={40}/><h2>Gate עוד לא מחובר</h2><p>חסרים מפתחות Google ב-Vercel (AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET, AUTH_SECRET).</p></div></main>;
+ if(!configured)return <main className="app"><Header/><div className="panel"><TicketIcon size={40}/><h2>Gate עוד לא מחובר</h2><p>חסרים מפתחות ב-Vercel (AUTH_GOOGLE_SECRET, AUTH_SECRET).</p></div></main>;
  if(!user)return <main className="app"><Header/><h1>הכרטיסים שלך,<br/>במקום אחד</h1><p className="sub">Gate קורא את מיילי הכרטיסים ב-Gmail ומסדר כל הופעה, הצגה וסרט בכרטיס אחד - עם התאריך, המקום, הכיסאות והברקוד לכניסה.</p>
   <form action={login}><button className="primary"><Mail size={20}/>כניסה עם Google</button></form><p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. הכרטיסים נשמרים רק בטלפון שלך.</p></main>;
  const list=tab===0?next:past;

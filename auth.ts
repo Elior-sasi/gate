@@ -1,9 +1,12 @@
 import NextAuth from 'next-auth';
 import Google from 'next-auth/providers/google';
+import {GOOGLE_CLIENT_ID} from '@/lib/google';
+// Production always signs in on the main address, so the Google redirect URI matches.
+if(process.env.VERCEL_ENV==='production')process.env.AUTH_URL='https://gatetickets.vercel.app';
 export const GMAIL_SCOPE='https://www.googleapis.com/auth/gmail.readonly';
 export const {handlers,auth,signIn,signOut}=NextAuth({
   trustHost:true,
-  providers:[Google({clientId:process.env.AUTH_GOOGLE_ID,clientSecret:process.env.AUTH_GOOGLE_SECRET,authorization:{params:{scope:'openid email profile '+GMAIL_SCOPE,access_type:'offline',prompt:'consent',include_granted_scopes:'true'}}})],
+  providers:[Google({clientId:GOOGLE_CLIENT_ID,clientSecret:process.env.AUTH_GOOGLE_SECRET,authorization:{params:{scope:'openid email profile '+GMAIL_SCOPE,access_type:'offline',prompt:'consent',include_granted_scopes:'true'}}})],
   session:{strategy:'jwt',maxAge:30*24*60*60},
   callbacks:{
     async jwt({token,account,profile}){if(account){token.accessToken=account.access_token;token.refreshToken=account.refresh_token||token.refreshToken;token.expiresAt=account.expires_at;token.googleId=profile?.sub;token.scope=account.scope||'';}return token;},
