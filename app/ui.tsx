@@ -38,7 +38,8 @@ function mergeAll(a:Ticket[],b:Ticket[]){const by=new Map(a.map(t=>[t.key,t]));
 function addToCalendar(t:Ticket){const f=document.createElement('form');f.method='POST';f.action='/api/ics';
  const v:Record<string,string>={start:t.start,title:t.title,venue:t.venue||'',address:t.address||'',city:t.city||'',seats:t.seats.join('; '),doors:t.doors||'',order:t.order||'',provider:t.provider||'',hours:t.kind==='movie'?'2':'3'};
  for(const [k,val] of Object.entries(v)){const i=document.createElement('input');i.type='hidden';i.name=k;i.value=val;f.appendChild(i);}document.body.appendChild(f);f.submit();f.remove();}
-function Logo(){return <svg viewBox="0 0 512 512" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="var(--acc)"/><stop offset="1" stopColor="var(--acc2)"/></linearGradient></defs><path d="M136 120h240a24 24 0 0 1 24 24v76a36 36 0 0 0 0 72v76a24 24 0 0 1-24 24H136a24 24 0 0 1-24-24v-76a36 36 0 0 0 0-72v-76a24 24 0 0 1 24-24z" fill="url(#lg)"/><path d="M196 332v-82a60 60 0 0 1 120 0v82" fill="none" stroke="var(--bg)" strokeWidth="30" strokeLinecap="round"/></svg>;}
+// The G of "Gate": a gold ring whose bar is a ticket with a tear line (same idea as the U of Unbox).
+function Logo(){return <svg viewBox="112 136 296 280" aria-hidden="true"><defs><linearGradient id="lg" gradientUnits="userSpaceOnUse" x1="0" y1="400" x2="0" y2="150"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id="lm"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="262" cy="276" r="16" fill="#000"/><circle cx="398" cy="276" r="16" fill="#000"/></mask></defs><path d="M331 201 A106 106 0 1 0 362 276" fill="none" stroke="url(#lg)" strokeWidth="58" strokeLinecap="round"/><rect x="262" y="246" width="136" height="60" rx="14" fill="#ffd27a" mask="url(#lm)"/><line x1="352" y1="256" x2="352" y2="296" stroke="var(--bg)" strokeWidth="6" strokeDasharray="3 9" strokeLinecap="round"/></svg>;}
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
  const [tab,setTab]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
@@ -91,7 +92,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   {toast&&<div className="toast" role="status">{toast}</div>}
   {!sel&&<nav style={{['--tab' as string]:tab}} aria-label="ניווט">{[['קרובים',CalendarDays],['היו',History],['הגדרות',Settings]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
  </main>;}
-function Header({actions}:{actions?:React.ReactNode}){return <header className="top row"><div className="brand"><Logo/>Gate</div><div className="actions">{actions}</div></header>;}
+function Header({actions}:{actions?:React.ReactNode}){return <header className="top row"><span className="brand" dir="ltr" aria-label="Gate"><Logo/><span aria-hidden="true">ate</span></span><div className="actions">{actions}</div></header>;}
 function Hero({t,onOpen}:{t:Ticket;onOpen:()=>void}){const [n,u]=countdown(t);const K=KIND[t.kind];
  return <button className="nextCard" onClick={onOpen}>
   <div className="nc-k"><K.Icon size={16}/>האירוע הבא · {K.label}</div>
