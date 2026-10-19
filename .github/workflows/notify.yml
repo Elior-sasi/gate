@@ -1,4 +1,4 @@
-name: Gate reminders
+name: Unstage reminders
 on:
   schedule:
     - cron: '7,37 * * * *'

@@ -304,6 +304,9 @@ function Summary({list}:{list:Ticket[]}){const slide=useRowSlide();const y=new D
 // pdf.js is served from this site (public/pdfjs, the legacy build for older Safari) and loaded ahead when an event opens.
 let pdfjs:Promise<any>|null=null;
 function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' as string).then((lib:any)=>{lib.GlobalWorkerOptions.workerSrc='/pdfjs/pdf.worker.min.mjs';return lib;}).catch(e=>{pdfjs=null;throw e;});return pdfjs;}
+// Save or send the ticket file through the phone's share sheet (a link would leave the home-screen app with no way back).
+async function shareFile(f:TFile){try{const blob=await (await fetch(fileUrl(f))).blob();const file=new File([blob],f.name||'ticket.pdf',{type:blob.type||f.type});
+ if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return;}const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),4000);}catch{}}
 // Full-screen ticket viewer with a close button: a home-screen app has no browser back button.
 // PDFs are drawn page by page (pdf.js from cdnjs), images are shown as they are.
 function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const [zoom,setZoom]=useState('');
@@ -315,6 +318,6 @@ function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDiv
     const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';c.onclick=()=>setZoom(c.toDataURL('image/png'));await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
   }catch{setErr('לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
  return <div className="viewer" role="dialog" aria-label="הכרטיס">{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
-  <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><a className="ib" href={fileUrl(f)} download={f.name||'ticket'} aria-label="שמירה"><Share2/></a></div>
+  <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><button className="ib" aria-label="שמירה או שיתוף" onClick={()=>void shareFile(f)}><Share2/></button></div>
   <div className="viewerBody" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>setZoom(fileUrl(f))}/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>
  </div>;}
