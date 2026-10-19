@@ -119,11 +119,11 @@ nav button svg{width:22px;height:22px}nav button.selected{color:var(--acc-text)}
 .sname{font-size:34px;font-weight:700;letter-spacing:-.3px;color:#eaf4ff;animation:sin .6s .55s ease-out both}
 @keyframes sin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .mark .tk{transform-box:view-box;transform-origin:256px 132px}
-.mark.draw .ring{stroke-dasharray:100;animation:gdraw .85s cubic-bezier(.6,0,.2,1) both}
+
 @keyframes gdraw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
-.mark.draw .tk{animation:tkin .6s .65s cubic-bezier(.2,.9,.3,1.25) both}
+
 @keyframes tkin{from{transform:translateY(-70px) rotate(-14deg);opacity:0}to{transform:none;opacity:1}}
-.mark.bob .tk{animation:tkbob 1.6s cubic-bezier(.45,0,.55,1) infinite}
+
 @keyframes tkbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-58px) rotate(-8deg)}}
 .loader{display:flex;flex-direction:column;align-items:center;gap:18px;padding:56px 0 40px;color:var(--mut);font-size:calc(17px*var(--fs))}
 .lmark{width:104px;height:auto;overflow:visible;animation:lbob 1.6s ease-in-out infinite}
@@ -161,3 +161,9 @@ nav.none:before{opacity:0}
 .askHints{display:flex;flex-wrap:wrap;gap:8px}.askHints button{padding:9px 13px;border-radius:99px;border:1px solid var(--acc-edge);background:#1a1710;color:#ffe6b8;font-size:calc(15px*var(--fs))}
 .askBar{display:flex;gap:8px;align-items:center}.askBar input{flex:1;min-width:0;padding:12px;border-radius:14px;border:1px solid var(--line);background:#0b1520;color:#fff;font-size:max(16px,calc(16px*var(--fs)))}
 @media(prefers-reduced-motion:reduce){.splash .ring,.splash .tk,.sname{animation:none!important}}
+
+.viewer{position:fixed;inset:0;z-index:80;background:#05080b;display:flex;flex-direction:column;animation:fadeIn .15s ease}
+.viewerTop{display:flex;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
+.viewerBody{flex:1;overflow:auto;padding:0 12px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:12px;touch-action:pan-x pan-y pinch-zoom;-webkit-overflow-scrolling:touch}
+.viewerBody .pdfPage,.viewerBody img{width:100%;max-width:640px;height:auto;border-radius:12px;background:#fff}
+.file{width:100%;text-align:right;font:inherit}

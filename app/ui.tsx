@@ -3,6 +3,7 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
 import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
+import {mergeAll} from '@/lib/combine';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
 const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},other:{label:'אירוע',Icon:TicketIcon}};
@@ -29,22 +30,15 @@ const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:/image/.test(f.ty
 const fileLabel=(f:TFile,i:number,n:number)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):'כרטיס'+(n>1?' '+(i+1):'');
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":-]*[A-Za-z0-9)]/g,m=>'⁦'+m+'⁩');
 const NAM=(u:string)=>'gate:names:'+u;
-const KEY=(u:string)=>'gate:v4:'+u;const HID=(u:string)=>'gate:hidden:'+u;
+const KEY=(u:string)=>'gate:v5:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
-// A newer reading of the same mail (Gemini after the rules) replaces the old card, and two mails about one event become one card.
-const same=(a:Ticket,b:Ticket)=>a.key===b.key||a.msgs.some(m=>b.msgs.includes(m))||(a.start===b.start&&a.start.includes('T')&&a.title.replace(/\s+/g,'')===b.title.replace(/\s+/g,''));
-function join(o:Ticket,t:Ticket):Ticket{const best=t.ai&&!o.ai?t:o.ai&&!t.ai?o:t;
- return {...best,msgs:[...new Set([...o.msgs,...t.msgs])],seats:best.seats.length?best.seats:[...new Set([...o.seats,...t.seats])],files:[...o.files,...t.files.filter(f=>!o.files.some(g=>g.id===f.id))],links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))],cancelled:o.cancelled||t.cancelled,mailed:Math.max(o.mailed,t.mailed)};}
-function mergeAll(a:Ticket[],b:Ticket[]){let out=[...a];
- for(const t of b){const hits=out.filter(o=>same(o,t));out=out.filter(o=>!hits.includes(o));out.push(hits.reduce((acc,o)=>join(o,acc),t));}
- return out;}
 function addToCalendar(t:Ticket){const f=document.createElement('form');f.method='POST';f.action='/api/ics';
  const v:Record<string,string>={start:t.start,title:t.title,venue:t.venue||'',address:t.address||'',city:t.city||'',seats:t.seats.join('; '),doors:t.doors||'',order:t.order||'',provider:t.provider||'',hours:t.kind==='movie'?'2':'3'};
  for(const [k,val] of Object.entries(v)){const i=document.createElement('input');i.type='hidden';i.name=k;i.value=val;f.appendChild(i);}document.body.appendChild(f);f.submit();f.remove();}
 // The U of "Unstage": the same U as Unbox, with a ticket as its lid.
 // anim "draw": the U draws itself and the ticket drops on (opening screen); "bob": the ticket lifts and lands (loading).
-function Mark({cls,anim}:{cls?:string;anim?:'draw'|'bob'}){const id=anim||'s';return <svg className={'mark'+(anim?' '+anim:'')+(cls?' '+cls:'')} viewBox="100 70 312 392" aria-hidden="true"><defs><linearGradient id={'lg'+id} gradientUnits="userSpaceOnUse" x1="0" y1="430" x2="0" y2="180"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id={'lm'+id} maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="156" cy="132" r="14.6" fill="#000"/><circle cx="356" cy="132" r="14.6" fill="#000"/></mask></defs><path className="ring" pathLength="100" d="M150 214 V320 a106 106 0 0 0 212 0 V210" fill="none" stroke={'url(#lg'+id+')'} strokeWidth="58" strokeLinecap="round"/><g className="tk"><g transform="rotate(-10 256 132)"><rect x="156" y="89" width="200" height="86" rx="16" fill="#ffd27a" mask={'url(#lm'+id+')'}/><line x1="296" y1="101" x2="296" y2="163" stroke="var(--bg)" strokeWidth="7" strokeDasharray="3 11" strokeLinecap="round"/></g></g></svg>;}
+function Mark({cls,anim}:{cls?:string;anim?:'draw'|'bob'}){const id=anim||'s';return <svg className={'mark'+(anim?' '+anim:'')+(cls?' '+cls:'')} viewBox="100 70 312 392" aria-hidden="true"><defs><linearGradient id={'lg'+id} gradientUnits="userSpaceOnUse" x1="0" y1="430" x2="0" y2="180"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id={'lm'+id} maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="156" cy="132" r="14.6" fill="#000"/><circle cx="356" cy="132" r="14.6" fill="#000"/></mask></defs><path className="ring" pathLength="100" strokeDasharray={anim==='draw'?'100':undefined} d="M150 214 V320 a106 106 0 0 0 212 0 V210" fill="none" stroke={'url(#lg'+id+')'} strokeWidth="58" strokeLinecap="round">{anim==='draw'&&<animate attributeName="stroke-dashoffset" values="100;0" dur=".85s" fill="freeze" calcMode="spline" keySplines=".6 0 .2 1"/>}</path><g className="tk">{anim==='draw'&&<><animateTransform attributeName="transform" type="translate" values="0 -80;0 6;0 0" keyTimes="0;.75;1" dur=".6s" begin=".6s" fill="freeze" calcMode="spline" keySplines=".2 .9 .3 1;.4 0 .6 1"/><animate attributeName="opacity" values="0;0;1" keyTimes="0;.01;1" dur=".25s" begin=".6s" fill="freeze"/></>}{anim==='bob'&&<animateTransform attributeName="transform" type="translate" values="0 0;0 -58;0 0" dur="1.6s" repeatCount="indefinite" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1"/>}<g transform="rotate(-10 256 132)" opacity={anim==='draw'?0:1}>{anim==='draw'&&<set attributeName="opacity" to="1" begin=".6s" fill="freeze"/>}<rect x="156" y="89" width="200" height="86" rx="16" fill="#ffd27a" mask={'url(#lm'+id+')'}/><line x1="296" y1="101" x2="296" y2="163" stroke="var(--bg)" strokeWidth="7" strokeDasharray="3 11" strokeLinecap="round"/></g></g></svg>;}
 const Logo=()=><Mark/>;
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
@@ -174,15 +168,16 @@ function Card({t,i=0,onOpen}:{t:Ticket;i?:number;onOpen:()=>void}){const d=when(
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className="pill"><K.Icon/>{K.label}</span>}{timed(t)&&<span className="pill soft">{time(t)}</span>}
     {n>1&&n<=14&&!t.cancelled&&<span className="pill hot">בעוד {n} ימים</span>}{n===1&&!t.cancelled&&<span className="pill hot">מחר</span>}
     {t.files.length>0&&<span className="pill soft"><QrCode/>כרטיס</span>}</div></div></div></button>;}
-function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile|null>(null);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
+  {view&&<Viewer f={view} onClose={()=>setView(null)}/>}
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><div className="actions">{typeof navigator!=='undefined'&&'share' in navigator&&<button className="ib" aria-label="שיתוף" onClick={()=>navigator.share({title:t.title,text:[t.title,longDate(t)+(timed(t)?' בשעה '+time(t):''),place(t)].filter(Boolean).join('\n')}).catch(()=>{})}><Share2/></button>}<button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div></div>
   <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2>{bidi(t.title)}</h2>
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
    <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd"><b>{n}</b><span>{u}</span></div>}</div>
-  {t.files.length>0&&<div className="box"><h3><QrCode/>הכרטיסים</h3><div className="files">{t.files.map((f,i)=>{const I=fileIcon(f);return <a key={f.msg+f.id} className="file" href={fileUrl(f)} target="_blank" rel="noopener"><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span><small>{f.name.length<28?f.name:''}</small></a>;})}</div></div>}
+  {t.files.length>0&&<div className="box"><h3><QrCode/>הכרטיסים</h3><div className="files">{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:<button key={f.msg+f.id} className="file" onClick={()=>setView(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span><small>{f.name.length<28?f.name:''}</small></button>;})}</div></div>}
   {t.files.length===0&&t.links.length>0&&<div className="box"><h3><TicketIcon/>הכרטיסים</h3><div className="files">{t.links.map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>{l.label}</span></a>)}</div></div>}
   {w&&<div className="box"><h3><MapPin/>מקום</h3>{t.venue&&<p className="place">{bidi(t.venue)}</p>}{(t.address||t.city)&&<p className="addr">{bidi([t.address,t.city].filter(Boolean).join(', '))}</p>}
    <div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(w)+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(w)} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
@@ -252,3 +247,18 @@ function Summary({list}:{list:Ticket[]}){const y=new Date().getFullYear();const 
   {kinds.length>0&&<div className="box"><h3><TicketIcon/>לפי סוג</h3>{kinds.map(([k,n])=>{const K=KIND[k as Kind];return <div className="kindRow" key={k}><span><K.Icon size={16}/>{K.label}</span><i style={{width:(n/max*100)+'%'}}/><b>{n}</b></div>;})}</div>}
   {venues.length>0&&<div className="box"><h3><MapPin/>המקומות שלך</h3>{venues.map(([v,n])=><div className="kv" key={v}><span style={{whiteSpace:'normal'}}>{bidi(v)}</span><b style={{color:'var(--ink)'}}>{n}</b></div>)}</div>}
   {!inYear.length&&<div className="panel"><ChartColumn size={40}/><h2>עוד אין נתונים</h2><p>אחרי שיהיו כרטיסים, יופיע כאן סיכום.</p></div>}</>;}
+
+// Full-screen ticket viewer with a close button: a home-screen app has no browser back button.
+// PDFs are drawn page by page (pdf.js from cdnjs), images are shown as they are.
+function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);
+ useEffect(()=>{if(img){setBusy(false);return;}let off=false;(async()=>{try{
+   const lib:any=await import(/* webpackIgnore: true */ 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs' as string);
+   lib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+   const data=await (await fetch(fileUrl(f))).arrayBuffer();const pdf=await lib.getDocument({data}).promise;
+   for(let n=1;n<=Math.min(pdf.numPages,12)&&!off;n++){const page=await pdf.getPage(n);const w=(box.current?.clientWidth||360)*Math.min(3,devicePixelRatio||2);const vp=page.getViewport({scale:1});const v=page.getViewport({scale:w/vp.width});
+    const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
+  }catch{setErr('לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
+ return <div className="viewer" role="dialog" aria-label="הכרטיס">
+  <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><a className="ib" href={fileUrl(f)} download={f.name||'ticket'} aria-label="שמירה"><Share2/></a></div>
+  <div className="viewerBody" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס"/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>
+ </div>;}

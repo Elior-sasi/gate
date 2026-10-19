@@ -1,10 +1,12 @@
 // Turns a ticket email into an event: what, when, where, which seats, and the ticket files to show at the gate.
 // Gemini reads the mail when a key is set (stores word things very differently); the rules below are the fallback and the guard.
 import {gemini} from '@/lib/gemini';
+import {mergeAll} from '@/lib/combine';
 import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
 export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'other';
 export type TFile={msg:string;id:string;name:string;type:string;size:number};
-export type Ticket={key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
+export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean};
+export type Ticket={parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
  seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean};
 const HE_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const EN_MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
@@ -31,6 +33,7 @@ export function eventStart(text:string,mailed:number){const sent=new Date(mailed
  return best.y+'-'+pad(best.m)+'-'+pad(best.d)+(best.t?'T'+best.t:'');}
 const pick=(text:string,re:RegExp)=>text.match(re)?.[1]?.replace(/\s*\|\s*$/,'').replace(/\s+/g,' ').trim().slice(0,80)||'';
 export function seatsIn(text:string){const out:string[]=[];
+ for(const x of text.matchAll(/(?:אזור\s*[:\-]?\s*([\w\u0590-\u05FF'-]{1,12})[\s,|]*)?(?:שורה|row)\s*[:\-]?\s*(\w{1,4})[\s,|]*(?:כי?סאות|מושבים|seats)\s*[:\-]?\s*(\d{1,4})\s*[-–]\s*(\d{1,4})/gi)){const a=+x[3],b=+x[4];if(b>=a&&b-a<12)for(let n=a;n<=b;n++){const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+n;if(!out.includes(s))out.push(s);}}
  for(const x of text.matchAll(/(?:(?:אזור|יציע|גוש|section|block)\s*[:\-]?\s*([\w֐-׿'-]{1,12})[\s,|]*)?(?:שורה|row)\s*[:\-]?\s*(\w{1,4})[\s,|]*(?:כי?סא|מושב|מקום|seat)\s*[:\-]?\s*(\d{1,4})/gi)){
   const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+x[3];if(!out.includes(s))out.push(s);}
  return out.slice(0,12);}
@@ -85,8 +88,8 @@ const SCHEMA={type:'OBJECT',properties:{
  start:{type:'STRING',description:'Event start in local time, YYYY-MM-DDTHH:mm (or YYYY-MM-DD if no time). Not the purchase date.'},
  doors:{type:'STRING',description:'Doors/gates opening time HH:mm, if stated'},
  venue:{type:'STRING',description:'Venue or hall name'},address:{type:'STRING',description:'Street address of the venue, if stated'},city:{type:'STRING'},
- seats:{type:'ARRAY',items:{type:'STRING'},description:'One entry per seat in Hebrew, e.g. "אזור B, שורה 7, כיסא 12". Standing tickets: "עמידה".'},
- count:{type:'INTEGER',description:'Number of tickets'},order:{type:'STRING',description:'Order/booking number'},
+ seats:{type:'ARRAY',items:{type:'STRING'},description:'One entry per seat in Hebrew, e.g. "אזור B, שורה 7, כיסא 12". A range like "כיסאות: 5 - 6" is two entries (כיסא 5, כיסא 6). Standing tickets: "עמידה".'},
+ count:{type:'INTEGER',description:'Number of tickets in this order (e.g. "סה\"כ כרטיסים בהזמנה: 2")'},order:{type:'STRING',description:'Order/booking number'},
  provider:{type:'STRING',description:'Ticket seller or cinema chain'},price:{type:'STRING',description:'Total paid with currency sign'},
  cancelled:{type:'BOOLEAN',description:'true if this mail says the order or event was cancelled/refunded'}},required:['isTicket']};
 export type AiResult={ok:true;ticket:Ticket|null}|{ok:false};
@@ -114,14 +117,5 @@ export async function readTicket(m:Message):Promise<Read>{
 const norm=(s:string)=>s.toLowerCase().replace(/[^\w֐-׿]+/g,'');
 export function withKey(t:Ticket):Ticket{return {...t,key:t.order?'o:'+norm(t.order):'t:'+norm(t.title).slice(0,24)+':'+t.start.slice(0,10)};}
 // Several mails about one event (confirmation, reminder, the tickets themselves) become one card.
-export function mergeTickets(list:Ticket[]):Ticket[]{const by=new Map<string,Ticket>();
- for(const t of [...list].sort((a,b)=>a.mailed-b.mailed)){const k=t.key;const o=by.get(k);
-  if(!o){by.set(k,{...t,seats:[...t.seats],files:[...t.files],links:[...t.links],msgs:[...t.msgs]});continue;}
-  const prefer=t.ai&&!o.ai?t:o;
-  by.set(k,{...o,...Object.fromEntries(Object.entries(prefer).filter(([,v])=>v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length))),
-   title:prefer.title,start:t.start.length>o.start.length?t.start:prefer.start,
-   msgs:[...new Set([...o.msgs,...t.msgs])],seats:[...new Set([...o.seats,...t.seats])].slice(0,12),
-   files:[...o.files,...t.files.filter(f=>!o.files.some(g=>g.name===f.name&&g.size===f.size))].slice(0,10),
-   links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))].slice(0,4),
-   mailed:Math.max(o.mailed,t.mailed),cancelled:o.cancelled||t.cancelled} as Ticket);}
- return [...by.values()];}
+// Several mails about one event (confirmation, reminder, a second order for more seats) become one card.
+export function mergeTickets(list:Ticket[]):Ticket[]{return mergeAll([],[...list].sort((a,b)=>a.mailed-b.mailed));}

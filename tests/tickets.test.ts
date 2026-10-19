@@ -29,3 +29,11 @@ test('marketing and self mail are not tickets',()=>{
  assert.equal(cleanTitle('סינמטק ירושלים - אישור הזמנה'),'סינמטק ירושלים');
  assert.equal(cleanTitle('אישור רכישה - FRIENDS רשת מועדוני תרבות (מס״ד: 1571809 הזמנה: 55'),'FRIENDS רשת מועדוני תרבות');});
 test('lectures at a cinematheque are lectures',()=>{assert.equal(guessKind('סינמטק ירושלים - הרצאה: היסטוריה של האנימה'),'lecture');assert.equal(guessKind('סינמטק תל אביב - מפגש עם הבמאי'),'lecture');assert.equal(guessKind('סינמטק תל אביב - פרפקט דייז'),'movie');});
+test('three orders for one show add up, and a re-read does not double count',async()=>{const {mergeAll}=await import('@/lib/combine');
+ const base={thread:'t',title:'טארה סטרונג - מאסטרקלאס',kind:'lecture' as const,start:'2026-11-03T17:00',files:[],links:[],ai:true};
+ const a=withKey({...base,key:'',msgs:['m1'],order:'16320-39278-74340',seats:['שורה 1, כיסא 5','שורה 1, כיסא 6'],count:2,price:'86.00 ₪',mailed:1});
+ const b=withKey({...base,key:'',msgs:['m2'],order:'20980-39279-55490',seats:['שורה 1, כיסא 2'],count:1,price:'43.00 ₪',mailed:2});
+ const c=withKey({...base,key:'',msgs:['m3'],order:'55310-39279-82909',seats:['שורה 1, כיסא 10'],count:1,price:'43.00 ₪',mailed:3});
+ let all=mergeAll([],[a,b,c]);assert.equal(all.length,1);assert.equal(all[0].count,4);assert.equal(all[0].seats.length,4);assert.match(all[0].price!,/172/);
+ all=mergeAll(all,[b]);assert.equal(all[0].count,4);
+ assert.deepEqual(seatsIn('רגיל x 2 אזור: אולם, שורה: 1, כיסאות: 5 - 6'),['אזור אולם, שורה 1, כיסא 5','אזור אולם, שורה 1, כיסא 6']);});
