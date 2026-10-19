@@ -1,0 +1,110 @@
+// Turns a ticket email into an event: what, when, where, which seats, and the ticket files to show at the gate.
+// Gemini reads the mail when a key is set (stores word things very differently); the rules below are the fallback and the guard.
+import {gemini} from '@/lib/gemini';
+import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
+export type Kind='concert'|'show'|'movie'|'sport'|'festival'|'standup'|'other';
+export type TFile={msg:string;id:string;name:string;type:string;size:number};
+export type Ticket={key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
+ seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean};
+const HE_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const EN_MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const pad=(n:number)=>String(n).padStart(2,'0');
+const fullYear=(y:number)=>y<100?2000+y:y;
+// Every date written in the text, with where it was found (Hebrew/English month names and dd/mm/yy forms).
+export function datesIn(text:string){const out:{at:number;y:number;m:number;d:number}[]=[];
+ for(const x of text.matchAll(/(?<![\d/.])(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(?![\d/.])/g)){const d=+x[1],m=+x[2],y=fullYear(+x[3]);if(m>=1&&m<=12&&d>=1&&d<=31&&y>=2020&&y<=2040)out.push({at:x.index!,y,m,d});}
+ const he=new RegExp('(\\d{1,2})\\s*(?:ב|ל)?(?:'+HE_MONTHS.join('|')+'|מארס)\\s*,?\\s*(\\d{4})?','g');
+ for(const x of text.matchAll(he)){const name=x[0].replace(/[\d\s,]/g,'').replace(/^[בל]/,'');let m=HE_MONTHS.indexOf(name)+1;if(name==='מארס')m=3;if(m)out.push({at:x.index!,y:x[2]?+x[2]:0,m,d:+x[1]});}
+ for(const x of text.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?,?\s+(\d{4})\b/gi))out.push({at:x.index!,y:+x[3],m:EN_MONTHS.indexOf(x[2].toLowerCase())+1,d:+x[1]});
+ for(const x of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})\b/gi))out.push({at:x.index!,y:+x[3],m:EN_MONTHS.indexOf(x[1].toLowerCase())+1,d:+x[2]});
+ return out.sort((a,b)=>a.at-b.at);}
+const TIME=/(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)/g;
+// The event moment: the first date that has a time close to it, and is not before the mail was sent.
+export function eventStart(text:string,mailed:number){const sent=new Date(mailed);const floor=new Date(sent.getFullYear(),sent.getMonth(),sent.getDate()).getTime();
+ const cand=datesIn(text).map(c=>{let y=c.y;if(!y){y=sent.getFullYear();if(new Date(y,c.m-1,c.d).getTime()<floor)y++;}
+  const before=text.slice(Math.max(0,c.at-30),c.at);const near=text.slice(Math.max(0,c.at-14),c.at+50).split('\n').slice(0,2).join(' ');const t=[...near.matchAll(TIME)].find(t=>!/^0?0:00$/.test(t[0]));
+  const bought=/(?:הזמנ|רכיש|נרכש|הונפק|תשלום|purchase|order(?:ed)? date|issued|booked on)[^\n]{0,20}$/i.test(before);
+  return {y,m:c.m,d:c.d,t:t?pad(+t[1])+':'+t[2]:'',bought,when:new Date(y,c.m-1,c.d).getTime()};}).filter(c=>c.when>=floor-864e5);
+ const real=cand.filter(c=>!c.bought);const pool=real.length?real:cand;
+ // A date on the day the mail was sent is usually the purchase date; a later date wins when there is one.
+ const later=pool.filter(c=>c.when>floor);const best=later.find(c=>c.t)||pool.find(c=>c.t)||later[0]||pool[0];if(!best)return '';
+ return best.y+'-'+pad(best.m)+'-'+pad(best.d)+(best.t?'T'+best.t:'');}
+const pick=(text:string,re:RegExp)=>text.match(re)?.[1]?.replace(/\s*\|\s*$/,'').replace(/\s+/g,' ').trim().slice(0,80)||'';
+export function seatsIn(text:string){const out:string[]=[];
+ for(const x of text.matchAll(/(?:(?:אזור|יציע|גוש|section|block)\s*[:\-]?\s*([\w֐-׿'-]{1,12})[\s,|]*)?(?:שורה|row)\s*[:\-]?\s*(\w{1,4})[\s,|]*(?:כי?סא|מושב|מקום|seat)\s*[:\-]?\s*(\d{1,4})/gi)){
+  const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+x[3];if(!out.includes(s))out.push(s);}
+ return out.slice(0,12);}
+const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?הזמנה|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
+export function cleanTitle(s:string){let t=s;for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
+export function guessKind(t:string):Kind{
+ if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|פלאנט|planet/i.test(t))return 'movie';
+ if(/סטנד.?אפ|stand.?up|קומי/i.test(t))return 'standup';
+ if(/משחק|נגד|vs\.?|מכבי|הפועל|בית"ר|ליגה|יורוליג|כדורגל|כדורסל|match|game/i.test(t))return 'sport';
+ if(/פסטיבל|festival/i.test(t))return 'festival';
+ if(/הצגה|תיאטרון|הבימה|הקאמרי|גשר|לסין|מחזה|מחזמר|theat(?:er|re)|musical|אופרה|בלט|opera|ballet/i.test(t))return 'show';
+ if(/הופעה|הופעת|קונצרט|concert|live|tour|בארבי|זאפה|פילהרמונית|מופע/i.test(t))return 'concert';
+ return 'other';}
+const TICKETISH=/כרטיס|ticket|הזמנת מקומות|שורה|row|מושב|seat|הופעה|הצגה|הקרנה|מופע|כניסה|פתיחת דלתות|doors|admission|e-?ticket|ברקוד|barcode|qr/i;
+const NOT_TICKET=/טיסה|flight|boarding pass|מלון|hotel|booking\.com|airbnb|השכרת רכב|רכבת ישראל|משלוח|shipped|parcel|חבילה|קבלה על תרומה|newsletter|ניוזלטר/i;
+// Rule-based reading, used without a Gemini key and as the fallback when Gemini is busy.
+export function ruleTicket(m:Message,text:string):Ticket|null{
+ const subject=header(m,'subject');const mailed=+(m.internalDate||Date.now());const all=subject+'\n'+text;
+ if(!TICKETISH.test(all)||NOT_TICKET.test(subject))return null;
+ const start=eventStart(text,mailed)||eventStart(subject,mailed);if(!start)return null;
+ const title=cleanTitle(subject);const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
+ return {key:'',msgs:[m.id],thread:m.threadId,title,kind:guessKind(all),start,
+  doors:pick(text,/(?:פתיחת (?:דלתות|שערים)|doors open)\s*[:\-]?\s*(\d{1,2}:\d{2})/i)||undefined,
+  venue:pick(text,/(?:^|\n)\s*(?:מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location)\s*[:\-]\s*([^\n]{3,80})/i)||undefined,
+  address:pick(text,/(?:^|\n)\s*(?:כתובת|address)\s*[:\-]\s*([^\n]{4,80})/i)||undefined,
+  seats:seatsIn(text),count:Number(pick(text,/(?:מספר כרטיסים|כמות(?: כרטיסים)?|quantity|tickets?)\s*[:\-x×]\s*(\d{1,2})\b/i))||undefined,
+  order:pick(text,/(?:מס['׳]?\s*(?:ה)?הזמנה|מספר (?:ה)?הזמנה|order\s*(?:no\.?|number|#)|booking\s*(?:ref(?:erence)?|no\.?|#))\s*[:#\-]?\s*([A-Z0-9-]{4,24})/i)||undefined,
+  provider:header(m,'from').replace(/<.*>/,'').replace(/"/g,'').trim()||undefined,
+  price:pick(text,/(?:סה["״]?כ(?: לתשלום)?|total)\s*[:\-]?\s*(₪\s?[\d,.]+|[\d,.]+\s?₪|[$€£]\s?[\d,.]+)/i)||undefined,
+  files,links:ticketLinks(m),mailed,cancelled:/בוטל|cancel+ed|refund/i.test(subject)};}
+const SCHEMA={type:'OBJECT',properties:{
+ isTicket:{type:'BOOLEAN',description:'true only for tickets/booking confirmations for an event the user will attend (concert, show, movie, sport, festival, stand-up, lecture). false for flights, hotels, shop orders, marketing, newsletters.'},
+ title:{type:'STRING',description:'Short event name as people say it, in the language used in the mail (Hebrew preferred). No words like "אישור הזמנה" or order numbers.'},
+ kind:{type:'STRING',enum:['concert','show','movie','sport','festival','standup','other']},
+ start:{type:'STRING',description:'Event start in local time, YYYY-MM-DDTHH:mm (or YYYY-MM-DD if no time). Not the purchase date.'},
+ doors:{type:'STRING',description:'Doors/gates opening time HH:mm, if stated'},
+ venue:{type:'STRING',description:'Venue or hall name'},address:{type:'STRING',description:'Street address of the venue, if stated'},city:{type:'STRING'},
+ seats:{type:'ARRAY',items:{type:'STRING'},description:'One entry per seat in Hebrew, e.g. "אזור B, שורה 7, כיסא 12". Standing tickets: "עמידה".'},
+ count:{type:'INTEGER',description:'Number of tickets'},order:{type:'STRING',description:'Order/booking number'},
+ provider:{type:'STRING',description:'Ticket seller or cinema chain'},price:{type:'STRING',description:'Total paid with currency sign'},
+ cancelled:{type:'BOOLEAN',description:'true if this mail says the order or event was cancelled/refunded'}},required:['isTicket']};
+export type AiResult={ok:true;ticket:Ticket|null}|{ok:false};
+export async function aiTicket(m:Message,text:string):Promise<AiResult>{
+ if(!process.env.GEMINI_API_KEY)return {ok:false};
+ const subject=header(m,'subject'),from=header(m,'from');const mailed=+(m.internalDate||Date.now());
+ const prompt='Mail sent '+new Date(mailed).toISOString().slice(0,10)+'\nFrom: '+from+'\nSubject: '+subject+'\n\n'+text.slice(0,7000);
+ const r=await gemini({systemInstruction:{parts:[{text:'You read emails for an Israeli user and extract event ticket details as JSON. Be exact; leave fields out when the mail does not say them.'}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseSchema:SCHEMA,temperature:0}},20000);
+ if(!r.ok)return {ok:false};
+ let j:Record<string,any>;try{j=JSON.parse(r.text);}catch{return {ok:false};}
+ if(!j.isTicket||!/^\d{4}-\d{2}-\d{2}/.test(String(j.start||'')))return {ok:true,ticket:null};
+ const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;
+ return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','sport','festival','standup','other'].includes(j.kind)?j.kind:guessKind(subject+text)) as Kind,
+  start:String(j.start).slice(0,16),doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
+  order:s(j.order),provider:s(j.provider),price:s(j.price),files:ticketFiles(m).map(f=>({...f,msg:m.id})),links:ticketLinks(m),mailed,ai:true,cancelled:!!j.cancelled}};}
+export type Read={ticket:Ticket|null;retry:boolean};
+export async function readTicket(m:Message):Promise<Read>{
+ const text=bodyText(m);const rule=ruleTicket(m,text);
+ // Mail with no ticket words at all is skipped without spending a Gemini call.
+ if(!TICKETISH.test(header(m,'subject')+'\n'+text))return {ticket:null,retry:false};
+ const ai=await aiTicket(m,text);
+ if(ai.ok)return {ticket:ai.ticket?withKey(ai.ticket):null,retry:false};
+ // Gemini busy or off: keep what the rules found, and read the mail again next time if a key is set.
+ return {ticket:rule?withKey(rule):null,retry:!!process.env.GEMINI_API_KEY};}
+const norm=(s:string)=>s.toLowerCase().replace(/[^\w֐-׿]+/g,'');
+export function withKey(t:Ticket):Ticket{return {...t,key:t.order?'o:'+norm(t.order):'t:'+norm(t.title).slice(0,24)+':'+t.start.slice(0,10)};}
+// Several mails about one event (confirmation, reminder, the tickets themselves) become one card.
+export function mergeTickets(list:Ticket[]):Ticket[]{const by=new Map<string,Ticket>();
+ for(const t of [...list].sort((a,b)=>a.mailed-b.mailed)){const k=t.key;const o=by.get(k);
+  if(!o){by.set(k,{...t,seats:[...t.seats],files:[...t.files],links:[...t.links],msgs:[...t.msgs]});continue;}
+  const prefer=t.ai&&!o.ai?t:o;
+  by.set(k,{...o,...Object.fromEntries(Object.entries(prefer).filter(([,v])=>v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length))),
+   title:prefer.title,start:t.start.length>o.start.length?t.start:prefer.start,
+   msgs:[...new Set([...o.msgs,...t.msgs])],seats:[...new Set([...o.seats,...t.seats])].slice(0,12),
+   files:[...o.files,...t.files.filter(f=>!o.files.some(g=>g.name===f.name&&g.size===f.size))].slice(0,10),
+   links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))].slice(0,4),
+   mailed:Math.max(o.mailed,t.mailed),cancelled:o.cancelled||t.cancelled} as Ticket);}
+ return [...by.values()];}
