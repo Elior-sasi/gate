@@ -135,3 +135,6 @@ nav.dragging:before{transition:none}
 @keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .nextCard{animation:cardIn .45s cubic-bezier(.2,.8,.2,1) both}
 @media(prefers-reduced-motion:reduce){.splash{display:none}}
+
+.steps2{margin:8px 0;padding-inline-start:20px;color:var(--mut);line-height:1.7;font-size:calc(15px*var(--fs))}.steps2 b{color:var(--ink)}
+.set .primary,.set .ghost{margin-top:10px}

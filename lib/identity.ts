@@ -17,3 +17,10 @@ export async function identity(req:NextRequest){
  if(token.scope!==undefined&&!String(token.scope).includes('gmail.readonly'))throw new Error('NO_GMAIL');
  return {id:String(token.googleId),accessToken:await fresh(token)};
 }
+// The server copy keeps working while the app is closed, so it needs the long-lived Google refresh token.
+export async function pushIdentity(req:NextRequest){
+ const token=await getToken({req,secret:process.env.AUTH_SECRET,secureCookie:req.nextUrl.protocol==='https:'});
+ if(!token?.googleId)throw new Error('UNAUTHORIZED');
+ return {id:String(token.googleId),email:String(token.email||''),refreshToken:String(token.refreshToken||'')};
+}
+export {fresh as freshAccess};

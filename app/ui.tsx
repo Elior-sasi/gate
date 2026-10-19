@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
-import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
+import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
@@ -87,6 +87,24 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  const [navDrag,setNavDrag]=useState<number|null>(null);
  function navSlide(e:React.TouchEvent<HTMLElement>,moving:boolean){const r=e.currentTarget.getBoundingClientRect();const x=e.touches[0]?.clientX;if(x===undefined)return;
   const pos=Math.min(2,Math.max(0,(r.right-x)/(r.width/3)-0.5));if(!moving){setNavDrag(null);return;}setNavDrag(pos);const t=Math.round(pos);if(t!==tab){setTab(t);setOpen(null);}}
+ // The server copy (for reminders, the subscribed calendar and the widget) and phone notifications.
+ type Srv={enabled:boolean;publicKey?:string;devices?:number;calendar?:string;widget?:string};
+ const [srv,setSrv]=useState<Srv|null>(null);const [push,setPush]=useState<'checking'|'install'|'unsupported'|'denied'|'off'|'on'|'busy'>('checking');const [pushMsg,setPushMsg]=useState('');
+ useEffect(()=>{if(!user||user.id==='demo')return;void (async()=>{const s:Srv=await fetch('/api/push',{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false}));setSrv(s);
+  const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||(navigator as {standalone?:boolean}).standalone===true;
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){setPush(ios&&!standalone?'install':'unsupported');return;}
+  try{const reg=await navigator.serviceWorker.register('/sw.js');if(Notification.permission==='denied'){setPush('denied');return;}const sub=await reg.pushManager.getSubscription();setPush(sub&&Notification.permission==='granted'?'on':'off');}catch{setPush('unsupported');}})();},[user]);
+ const sendServer=useCallback(async(extra:Record<string,unknown>={})=>{if(!user)return null;const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickets:load(KEY(user.id),{tickets:[] as Ticket[]}).tickets,hidden:load(HID(user.id),[] as string[]),...extra})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'השמירה נכשלה');return d;},[user]);
+ // After every scan, the server copy follows the phone.
+ const synced=useRef('');useEffect(()=>{if(!srv?.enabled||busy||!store.updated)return;const sig=store.updated+'|'+hidden.length;if(synced.current===sig)return;synced.current=sig;sendServer().catch(()=>{});},[srv,busy,store.updated,hidden.length,sendServer]);
+ async function enablePush(){setPushMsg('');const perm=await Notification.requestPermission();if(perm!=='granted'){setPush(perm==='denied'?'denied':'off');return;}setPush('busy');
+  try{const reg=await navigator.serviceWorker.ready;const key=Uint8Array.from(atob((srv?.publicKey||'').replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+   const sub=await reg.pushManager.getSubscription()||await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:key});await sendServer({subscription:sub.toJSON()});setPush('on');}
+  catch(e){setPush('off');setPushMsg(e instanceof Error?e.message:'לא ניתן להפעיל התראות');}}
+ async function disablePush(){setPush('busy');setPushMsg('');try{const reg=await navigator.serviceWorker.ready;const sub=await reg.pushManager.getSubscription();if(sub){await sendServer({remove:sub.endpoint}).catch(()=>{});await sub.unsubscribe();}}finally{setPush('off');}}
+ async function testPush(){setPushMsg('');try{await sendServer({test:true});setPushMsg('נשלחה התראת בדיקה');}catch(e){setPushMsg(e instanceof Error?e.message:'השליחה נכשלה');}}
+ // A notification or the widget opens a ticket directly: /?t=<event>.
+ useEffect(()=>{if(!ready)return;const k=new URLSearchParams(location.search).get('t');if(!k)return;history.replaceState(null,'','/');if(store.tickets.some(t=>t.key===k))setOpen(k);},[ready,store.tickets]);
  const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Gate</div></div>;
  const visible=useMemo(()=>{const s=q.trim().toLowerCase();return store.tickets.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[store,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
@@ -117,7 +135,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
     return <>{tab===0&&hero&&!q&&rest.length>0&&<div className="listH">בהמשך</div>}<div className="list">{rest.map((t,i)=><Card key={t.key} t={t} i={i} onOpen={()=>setOpen(t.key)}/>)}</div></>;})()}
    {store.updated&&<p className="footnote">עודכן {new Date(store.updated).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}</p>}
   </>}
-  {tab===2&&<SettingsView user={user} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
+  {tab===2&&<SettingsView user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
   {sel&&<Sheet t={sel} onClose={close} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
   {toast&&<div className="toast" role="status">{toast}</div>}
   {!sel&&<nav className={navDrag!==null?'dragging':''} style={{['--tab' as string]:navDrag??tab}} aria-label="ניווט" onTouchStart={e=>navSlide(e,false)} onTouchMove={e=>navSlide(e,true)} onTouchEnd={()=>setNavDrag(null)} onTouchCancel={()=>setNavDrag(null)}>{[['קרובים',CalendarDays],['היו',History],['הגדרות',Settings]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
@@ -161,9 +179,35 @@ function Sheet({t,onClose,onHide,onCopy}:{t:Ticket;onClose:()=>void;onHide:()=>v
    <a className="ghost" href={'https://mail.google.com/mail/u/0/#all/'+t.thread} target="_blank" rel="noopener"><Mail size={19}/>פתיחת המייל</a></div>
   <button className="textBtn" onClick={onHide}><EyeOff size={16} style={{verticalAlign:-3,marginLeft:6}}/>זה לא כרטיס - הסתר</button>
  </div>;}
-function SettingsView({user,hiddenCount,onRestore,onRescan}:{user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void}){
+// Scriptable widget source with the personal link inside; the drawing code itself comes from Gate, so updates arrive by themselves.
+const widgetScript=(url:string)=>`// Gate widget: loads its drawing code from Gate, so updates arrive by themselves.
+const u=${JSON.stringify(url)}
+const r=await new Request(u).loadJSON().catch(()=>null)
+const code=await new Request(u+'&js=1').loadString().catch(()=>'')
+const AF=Object.getPrototypeOf(async function(){}).constructor
+if(code&&code.includes('ListWidget')){await new AF('r',code)(r)}else{const w=new ListWidget();w.backgroundColor=new Color('#0a0f14');const t=w.addText(r&&r.lines?r.lines.map(x=>x.t).join('\\n'):'אין נתונים כרגע');t.textColor=Color.white();t.font=Font.boldSystemFont(15);if(config.runsInWidget)Script.setWidget(w);else await w.presentSmall();Script.complete()}`;
+type SrvProps={srv:{enabled:boolean;devices?:number;calendar?:string;widget?:string}|null;push:string;pushMsg:string;onPush:()=>void;onTest:()=>void;onCopy:(t:string)=>void};
+function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan}:{user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void}&SrvProps){
+ const noDb=srv&&!srv.enabled;
  return <><h1>הגדרות</h1><div className="settings">
+  <div className="set"><h3><Bell size={18}/>התראות</h3>
+   <p className="setNote">ערב לפני כל אירוע, שלוש שעות לפני עם הכרטיס מוכן, וכשמגיע כרטיס חדש למייל.</p>
+   {noDb?<p className="setNote">השרת עוד לא חובר למסד נתונים.</p>
+    :push==='install'?<p className="setNote">באייפון התראות עובדות רק מהאפליקציה שבמסך הבית: שיתוף ← <b>הוסף למסך הבית</b>, ואז לפתוח משם.</p>
+    :push==='unsupported'?<p className="setNote">הדפדפן הזה לא תומך בהתראות.</p>
+    :push==='denied'?<p className="setNote">ההתראות חסומות בהגדרות הטלפון עבור Gate.</p>
+    :<><button className={push==='on'?'ghost':'primary'} disabled={push==='busy'||push==='checking'||!srv} onClick={onPush}>{push==='on'?<><BellOff size={18}/>כיבוי התראות</>:<><Bell size={18}/>הפעלת התראות</>}</button>
+     {push==='on'&&<button className="ghost" onClick={onTest}><Check size={18}/>התראת בדיקה</button>}</>}
+   {pushMsg&&<p className="setNote">{pushMsg}</p>}</div>
+  {srv?.calendar&&<div className="set"><h3><CalendarSync size={18}/>יומן שמתעדכן לבד</h3>
+   <p className="setNote">כל האירועים מופיעים ביומן של הטלפון, עם תזכורת שעתיים לפני. כרטיס חדש נכנס ליומן בעצמו.</p>
+   <a className="primary" href={srv.calendar}><CalendarPlus size={18}/>הוספה ליומן של האייפון</a>
+   <button className="ghost" onClick={()=>onCopy(srv.calendar!.replace(/^webcal/,'https'))}><Copy size={18}/>העתקת הקישור (ל-Google Calendar)</button></div>}
+  {srv?.widget&&<div className="set"><h3><Smartphone size={18}/>ווידג'ט למסך הבית ולמסך הנעילה</h3>
+   <p className="setNote">מראה את האירוע הבא ומה אחריו. עובד דרך אפליקציית <b>Scriptable</b> (חינם ב-App Store).</p>
+   <ol className="steps2"><li>העתק את הסקריפט.</li><li>ב-Scriptable: <b>+</b>, הדבק ושמור בשם <b>Gate</b>.</li><li>במסך הבית: לחיצה ארוכה ← <b>+</b> ← Scriptable ← גודל בינוני. בהגדרות הווידג'ט בחר את הסקריפט <b>Gate</b>.</li><li>גם למסך הנעילה: התאמה אישית ← מסך נעילה ← Scriptable, ובחר <b>Gate</b>.</li></ol>
+   <button className="ghost" onClick={()=>onCopy(widgetScript(srv.widget!))}><Copy size={18}/>העתקת הסקריפט</button></div>}
   <div className="set"><h3><Mail size={18}/>חשבון</h3><p className="setNote"><b>{user.name}</b><br/><span dir="ltr">{user.email}</span></p><button className="ghost" onClick={()=>signOut({redirectTo:'/'})}><LogOut size={18}/>יציאה</button></div>
   <div className="set"><h3><RefreshCw size={18}/>סריקה</h3><p className="setNote">Gate קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
    {hiddenCount>0&&<button className="ghost" onClick={onRestore}><EyeOff size={18}/>החזרת {hiddenCount} אירועים מוסתרים</button>}</div>
-  <p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. הכרטיסים נשמרים רק בטלפון הזה, וקובצי הכרטיס נפתחים ישירות מהמייל שלך.</p></div></>;}
+  <p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. רשימת האירועים נשמרת בטלפון, ועותק שלה בשרת בשביל התזכורות, היומן והווידג'ט. קובצי הכרטיס נפתחים ישירות מהמייל שלך. <a href="/privacy">פרטיות</a></p></div></>;}
