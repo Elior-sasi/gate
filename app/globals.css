@@ -354,3 +354,6 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .list>.card{animation:cardIn .38s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0)*45ms)}
 @keyframes cardIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 .setNote b{color:var(--ink);font-weight:600}
+
+.sheet{overflow-x:hidden}.sheet>*{max-width:min(608px,100%)}.box,.stub{min-width:0;overflow-wrap:anywhere}
+.kv .copy b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

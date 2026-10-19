@@ -221,7 +221,7 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&<span className="eta">🎟 כרטיס</span>}</div></div></div></button>;}
-function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile|null>(null);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile|null>(null);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
@@ -236,7 +236,7 @@ function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onR
    <div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(w)+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(w)} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
   {t.seats.length>0&&<div className="box"><h3><Armchair/>{t.seats.length===1?'המקום שלך':t.seats.length+' מקומות'}</h3><ul className="seats">{t.seats.map((s,i)=><li key={i}><i>{i+1}</i>{s}</li>)}</ul></div>}
   {(t.order||t.count||t.price)&&<div className="box"><h3><TicketIcon/>פרטי ההזמנה</h3>
-   {t.order&&<div className="kv"><span>מספר הזמנה</span><button className="copy" onClick={()=>copy(t.order!)}><b dir="ltr">{t.order}</b><Copy size={17}/></button></div>}
+   {t.order&&t.order.split(', ').map((o,i,a)=><div className="kv" key={o}><span>{a.length>1?'הזמנה '+(i+1):'מספר הזמנה'}</span><button className="copy" onClick={()=>copy(o)}><b dir="ltr">{o}</b><Copy size={17}/></button></div>)}
    {t.count&&<div className="kv"><span>כרטיסים</span><b style={{color:'var(--ink)'}}><Users size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.count}</b></div>}
    {t.price&&<div className="kv"><span>שולם</span><b style={{color:'var(--ink)'}} dir="ltr">{t.price}</b></div>}
    {t.doors&&<div className="kv"><span>פתיחת דלתות</span><b style={{color:'var(--ink)'}}><DoorOpen size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.doors}</b></div>}</div>}
@@ -301,13 +301,16 @@ function Summary({list}:{list:Ticket[]}){const slide=useRowSlide();const y=new D
   {venues.length>0&&<div className="box"><h3><MapPin/>המקומות שלך</h3>{venues.map(([v,n])=><div className="kv" key={v}><span style={{whiteSpace:'normal'}}>{bidi(v)}</span><b style={{color:'var(--ink)'}}>{n}</b></div>)}</div>}
   {!inYear.length&&<div className="panel"><ChartColumn size={40}/><h2>עוד אין נתונים</h2><p>אחרי שיהיו כרטיסים, יופיע כאן סיכום.</p></div>}</div></>;}
 
+// pdf.js is served from this site (public/pdfjs, the legacy build for older Safari) and loaded ahead when an event opens.
+let pdfjs:Promise<any>|null=null;
+function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' as string).then((lib:any)=>{lib.GlobalWorkerOptions.workerSrc='/pdfjs/pdf.worker.min.mjs';return lib;}).catch(e=>{pdfjs=null;throw e;});return pdfjs;}
 // Full-screen ticket viewer with a close button: a home-screen app has no browser back button.
 // PDFs are drawn page by page (pdf.js from cdnjs), images are shown as they are.
 function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const [zoom,setZoom]=useState('');
  useEffect(()=>{if(img){setBusy(false);return;}let off=false;(async()=>{try{
-   const lib:any=await import(/* webpackIgnore: true */ 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs' as string);
-   lib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
-   const data=await (await fetch(fileUrl(f))).arrayBuffer();const pdf=await lib.getDocument({data}).promise;
+   const lib=await pdfLib();const data=await (await fetch(fileUrl(f))).arrayBuffer();
+   // The worker sometimes fails to start on a phone's first try; one more try, then without a worker.
+   const open=(opts:object)=>lib.getDocument({data:data.slice(0),...opts}).promise;let pdf:any;try{pdf=await open({});}catch{try{pdf=await open({});}catch{pdf=await open({disableWorker:true});}}
    for(let n=1;n<=Math.min(pdf.numPages,12)&&!off;n++){const page=await pdf.getPage(n);const w=(box.current?.clientWidth||360)*Math.min(3,devicePixelRatio||2);const vp=page.getViewport({scale:1});const v=page.getViewport({scale:w/vp.width});
     const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';c.onclick=()=>setZoom(c.toDataURL('image/png'));await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
   }catch{setErr('לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
