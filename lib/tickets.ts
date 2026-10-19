@@ -106,14 +106,16 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
   start:String(j.start).slice(0,16),doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
   order:s(j.order),provider:s(j.provider),price:s(j.price),files:ticketFiles(m).map(f=>({...f,msg:m.id})),links:ticketLinks(m),mailed,ai:true,cancelled:!!j.cancelled}};}
 export type Read={ticket:Ticket|null;retry:boolean};
-export async function readTicket(m:Message):Promise<Read>{
+// last: this mail already waited once for Gemini, so the rules' reading is used rather than waiting again.
+export async function readTicket(m:Message,last=false):Promise<Read>{
  const text=bodyText(m);const rule=ruleTicket(m,text);
  // Mail with no ticket words at all is skipped without spending a Gemini call.
  if(!TICKETISH.test(header(m,'subject')+'\n'+text)||!looksLikePurchase(m))return {ticket:null,retry:false};
  const ai=await aiTicket(m,text);
  if(ai.ok)return {ticket:ai.ticket?withKey(ai.ticket):null,retry:false};
- // Gemini busy or off: keep what the rules found, and read the mail again next time if a key is set.
- return {ticket:rule?withKey(rule):null,retry:!!process.env.GEMINI_API_KEY};}
+ // Gemini busy: wait and read the mail again (a rough card would only be replaced a minute later). Gemini off, or a second miss: the rules.
+ if(process.env.GEMINI_API_KEY&&!last)return {ticket:null,retry:true};
+ return {ticket:rule?withKey(rule):null,retry:false};}
 const norm=(s:string)=>s.toLowerCase().replace(/[^\w֐-׿]+/g,'');
 export function withKey(t:Ticket):Ticket{return {...t,key:t.order?'o:'+norm(t.order):'t:'+norm(t.title).slice(0,24)+':'+t.start.slice(0,10)};}
 // Several mails about one event (confirmation, reminder, the tickets themselves) become one card.

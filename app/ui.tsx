@@ -39,11 +39,39 @@ function addToCalendar(t:Ticket){const f=document.createElement('form');f.method
 // The U of "Unstage": the same U as Unbox, with a ticket as its lid.
 // anim "draw": the U draws itself and the ticket drops on (opening screen); "bob": the ticket lifts and lands (loading).
 function Mark({cls,anim}:{cls?:string;anim?:'draw'|'bob'}){const id=anim||'s';return <svg className={'mark'+(anim?' '+anim:'')+(cls?' '+cls:'')} viewBox="100 70 312 392" aria-hidden="true"><defs><linearGradient id={'lg'+id} gradientUnits="userSpaceOnUse" x1="0" y1="430" x2="0" y2="180"><stop offset="0" stopColor="#ff9f2e"/><stop offset="1" stopColor="#ffd27a"/></linearGradient><mask id={'lm'+id} maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512"><rect x="0" y="0" width="512" height="512" fill="#fff"/><circle cx="156" cy="132" r="14.6" fill="#000"/><circle cx="356" cy="132" r="14.6" fill="#000"/></mask></defs><path className="ring" pathLength="100" strokeDasharray={anim==='draw'?'100':undefined} d="M150 214 V320 a106 106 0 0 0 212 0 V210" fill="none" stroke={'url(#lg'+id+')'} strokeWidth="58" strokeLinecap="round">{anim==='draw'&&<animate attributeName="stroke-dashoffset" values="100;0" dur=".85s" fill="freeze" calcMode="spline" keySplines=".6 0 .2 1"/>}</path><g className="tk">{anim==='draw'&&<><animateTransform attributeName="transform" type="translate" values="0 -80;0 6;0 0" keyTimes="0;.75;1" dur=".6s" begin=".6s" fill="freeze" calcMode="spline" keySplines=".2 .9 .3 1;.4 0 .6 1"/><animate attributeName="opacity" values="0;0;1" keyTimes="0;.01;1" dur=".25s" begin=".6s" fill="freeze"/></>}{anim==='bob'&&<animateTransform attributeName="transform" type="translate" values="0 0;0 -58;0 0" dur="1.6s" repeatCount="indefinite" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1"/>}<g transform="rotate(-10 256 132)" opacity={anim==='draw'?0:1}>{anim==='draw'&&<set attributeName="opacity" to="1" begin=".6s" fill="freeze"/>}<rect x="156" y="89" width="200" height="86" rx="16" fill="#ffd27a" mask={'url(#lm'+id+')'}/><line x1="296" y1="101" x2="296" y2="163" stroke="var(--bg)" strokeWidth="7" strokeDasharray="3 11" strokeLinecap="round"/></g></g></svg>;}
+// From Unbox: bottom-sheet chrome (a grab bar to pull down, and a close button), sliding a finger along a row to pick,
+// and a full-screen zoom (pinch, drag, double-tap).
+function swipeClose(close:()=>void){let y0=0,dy=0;return {
+ onTouchStart:(e:React.TouchEvent<HTMLElement>)=>{const el=e.currentTarget;y0=el.scrollTop>0?-1:e.touches[0].clientY;dy=0;},
+ onTouchMove:(e:React.TouchEvent<HTMLElement>)=>{if(y0<0)return;dy=Math.max(0,e.touches[0].clientY-y0);e.currentTarget.style.transform=dy?'translateY('+dy+'px)':'';},
+ onTouchEnd:(e:React.TouchEvent<HTMLElement>)=>{const el=e.currentTarget;if(dy>90){close();}else{el.style.transition='transform .2s';el.style.transform='';setTimeout(()=>{el.style.transition='';},220);}y0=0;dy=0;}};}
+function SheetTop({close}:{close:()=>void}){return <><div className="grab" aria-hidden="true"/><button type="button" className="sheetX" aria-label="סגירה" onClick={close}><X size={20}/></button></>;}
+function useRowSlide(){const slideX=useRef<number|null>(null);
+ return (count:number,pick:(i:number)=>void)=>({onTouchStart:(e:React.TouchEvent<HTMLElement>)=>{slideX.current=e.touches[0]?.clientX??null;},
+  onTouchMove:(e:React.TouchEvent<HTMLElement>)=>{const x=e.touches[0]?.clientX;if(x===undefined)return;if(slideX.current!==null&&Math.abs(x-slideX.current)<12)return;slideX.current=null;
+   const r=e.currentTarget.getBoundingClientRect();pick(Math.min(count-1,Math.max(0,Math.floor((r.right-x)/(r.width/count)))));}});}
+function Zoom({src,alt,onClose}:{src:string;alt:string;onClose:()=>void}){const [t,setT]=useState({s:1,x:0,y:0});const pts=useRef(new Map<number,{x:number;y:number}>());const start=useRef<{d:number;s:number;mx:number;my:number;x:number;y:number}|null>(null);const last=useRef(0);
+ const img=useRef<HTMLImageElement>(null);
+ // The photo never slides past its own edge into the black: it can move only as far as its zoomed size overflows the screen.
+ const clamp=(v:{s:number;x:number;y:number})=>{const s=Math.min(5,Math.max(1,v.s));if(s===1)return {s,x:0,y:0};const el=img.current;if(!el)return {s,x:v.x,y:v.y};
+  const mx=Math.max(0,(el.offsetWidth*s-innerWidth)/2),my=Math.max(0,(el.offsetHeight*s-innerHeight)/2);return {s,x:Math.max(-mx,Math.min(mx,v.x)),y:Math.max(-my,Math.min(my,v.y))};};
+ const begin=()=>{const a=[...pts.current.values()];if(a.length===2){start.current={d:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y),s:t.s,mx:(a[0].x+a[1].x)/2,my:(a[0].y+a[1].y)/2,x:t.x,y:t.y};}else if(a.length===1){start.current={d:0,s:t.s,mx:a[0].x,my:a[0].y,x:t.x,y:t.y};}};
+ useEffect(()=>{const k=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose();};addEventListener('keydown',k);return()=>removeEventListener('keydown',k);},[onClose]);
+ return <div className="zoom" role="dialog" aria-modal="true" aria-label={alt}>
+  <button className="zoomX" aria-label="סגירה" onClick={onClose}><X size={26}/></button>
+  <div className="zoomArea" onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);pts.current.set(e.pointerId,{x:e.clientX,y:e.clientY});begin();
+    if(pts.current.size===1){const now=Date.now();if(now-last.current<300)setT(v=>{if(v.s>1)return {s:1,x:0,y:0};const el=img.current;const fill=el?Math.max(innerHeight/el.offsetHeight,innerWidth/el.offsetWidth):2.5;return clamp({s:Math.max(1.5,fill),x:0,y:0});});last.current=now;}}}
+   onPointerMove={e=>{if(!pts.current.has(e.pointerId)||!start.current)return;pts.current.set(e.pointerId,{x:e.clientX,y:e.clientY});const a=[...pts.current.values()];const st=start.current;
+    if(a.length===2&&st.d){const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);const mx=(a[0].x+a[1].x)/2,my=(a[0].y+a[1].y)/2;setT(clamp({s:st.s*d/st.d,x:st.x+mx-st.mx,y:st.y+my-st.my}));}
+    else if(a.length===1&&t.s>1)setT(clamp({s:t.s,x:st.x+a[0].x-st.mx,y:st.y+a[0].y-st.my}));}}
+   onPointerUp={e=>{pts.current.delete(e.pointerId);begin();}} onPointerCancel={e=>{pts.current.delete(e.pointerId);begin();}}>
+   <img ref={img} src={src} alt={alt} referrerPolicy="no-referrer" draggable={false} style={{transform:`translate(${t.x}px,${t.y}px) scale(${t.s})`}}/></div></div>;}
+
 const Logo=()=><Mark/>;
 function GoogleButton({label,disabled}:{label:string;disabled?:boolean}){return <button className="gbtn" disabled={disabled}><svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg><span>{label}</span></button>;}
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
- const [tab,setTab]=useState(0);const [filt,setFilt]=useState<'next'|'past'>('next');const [names,setNames]=useState<Record<string,string>>({});const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
+ const [tab,setTab]=useState(0);const [filt,setFilt]=useState<'next'|'past'>('next');const [menu,setMenu]=useState<Ticket|null>(null);const [menuView,setMenuView]=useState<TFile|null>(null);const press=useRef<{t?:ReturnType<typeof setTimeout>;fired:boolean}>({fired:false});const slide=useRowSlide();const [names,setNames]=useState<Record<string,string>>({});const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);const [prog,setProg]=useState<[number,number]|null>(null);const [err,setErr]=useState('');const [toast,setToast]=useState('');
  const running=useRef(false);
  useEffect(()=>{if(!user)return;if(user.id==='demo'){import('@/lib/demo').then(d=>{setStore(d.demo());setReady(true);});return;}setStore(load(KEY(user.id),{tickets:[],read:[],updated:''}));setHidden(load(HID(user.id),[]));setNames(load(NAM(user.id),{}));setSize(load('unstage:size',0));setReady(true);},[user]);
@@ -53,7 +81,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
    const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
    const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));let cur=base;setProg([0,todo.length]);
    const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=6)o.push(l.slice(i,i+6));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
-   const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b})});const d=await res.json();
+   const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b,last:second})});const d=await res.json();
      if(!res.ok){if(res.status===401||res.status===403)throw new Error(d.error);continue;}
      cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)setProg([done,todo.length]);}second=true;};
    await worker();
@@ -120,6 +148,10 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  const close=()=>{if(history.state?.sheet)history.back();else setOpen(null);};
  const rename=(k:string)=>{if(!user)return;const cur=names[k]||store.tickets.find(t=>t.key===k)?.title||'';const v=prompt('שם לאירוע',cur);if(v===null)return;const n={...names};if(v.trim()&&v.trim()!==store.tickets.find(t=>t.key===k)?.title)n[k]=v.trim().slice(0,120);else delete n[k];setNames(n);save(NAM(user.id),n);say('השם עודכן');};
  const hide=(k:string)=>{if(!user)return;const h=[...hidden,k];setHidden(h);save(HID(user.id),h);close();say('האירוע הוסתר');};
+ // Long press on an event (as in Unbox): a short menu with what is needed at the door.
+ const longPress=(t:Ticket)=>({onTouchStart:()=>{press.current.fired=false;press.current.t=setTimeout(()=>{press.current.fired=true;try{navigator.vibrate?.(15);}catch{}setMenu(t);},480);},
+  onTouchMove:()=>{if(press.current.t)clearTimeout(press.current.t);},onTouchEnd:()=>{if(press.current.t)clearTimeout(press.current.t);},
+  onContextMenu:(e:React.MouseEvent)=>{e.preventDefault();setMenu(t);},onClick:()=>{if(press.current.fired){press.current.fired=false;return;}setOpen(t.key);}});
  const ago=(iso:string)=>{const m=Math.round((Date.now()-new Date(iso).getTime())/6e4);return m<1?'עודכן עכשיו':m<60?'עודכן לפני '+m+' דק׳':m<1440?'עודכן לפני '+Math.round(m/60)+' שע׳':'עודכן '+new Date(iso).toLocaleDateString('he-IL',{day:'numeric',month:'numeric'});};
  const title=tab===3?'הגדרות':tab===2?'סיכום':tab===1?'השבוע':filt==='past'?'היו':'האירועים שלי';
  const top=(acts:React.ReactNode)=><header className="top"><div className="row"><span className="brand" dir="ltr" aria-label="Unstage"><Logo/><span aria-hidden="true">nstage</span></span><div className="actions">{acts}</div></div><h1>{title}</h1>
@@ -133,35 +165,46 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   {splashEl}
   {pull>0&&!sel&&<div className={'ptr'+(pull>=80?' ready':'')} style={{transform:'translate(-50%,'+Math.max(0,pull-46)+'px)',opacity:Math.min(1,pull/80)}} aria-hidden="true"><RefreshCw style={{transform:'rotate('+pull*3+'deg)'}}/></div>}
   {top(<button className="ib" aria-label="הגדרות" aria-pressed={tab===3} onClick={()=>{setTab(tab===3?0:3);scrollTo({top:0});}}><Settings/></button>)}
-  {tab===0&&store.tickets.length>0&&<div className="tiles" role="tablist" aria-label="סינון אירועים">{([['next','קרובים',next.length],['past','היו',past.length]] as const).map(([k,l,n])=><button key={k} role="tab" aria-selected={filt===k} className={'tile'+(filt===k?' on':'')} onClick={()=>{setFilt(k);scrollTo({top:0});}}><b>{n}</b>{l}</button>)}</div>}
+  {tab===0&&store.tickets.length>0&&<div className="tiles" role="tablist" aria-label="סינון אירועים" {...slide(2,i=>{const k=i?'past':'next';if(k!==filt)setFilt(k);})}>{([['next','קרובים',next.length],['past','היו',past.length]] as const).map(([k,l,n])=><button key={k} role="tab" aria-selected={filt===k} className={'tile'+(filt===k?' on':'')} onClick={()=>{setFilt(k);scrollTo({top:0});}}><b>{n}</b>{l}</button>)}</div>}
   {!gmail&&<div className="error"><span>נכנסת עם Google, אבל לא אישרת קריאת Gmail.</span><form action={login}><button className="primary">חידוש הרשאת Google</button></form></div>}
   {err&&<div className="error" role="alert"><span>{err}</span><button className="ghost" onClick={()=>scan()}>נסה שוב</button></div>}
   {(tab===0||tab===1)&&<>
    {busy&&!store.tickets.length?<div className="loader" role="status"><Mark cls="lmark" anim="bob"/><p>{prog&&prog[1]?'מביא את הכרטיסים שלך…':'בודק את Gmail…'}</p></div>:<>
    {tab===0&&<label className="search"><Search size={20}/><input aria-label="חיפוש אירועים" placeholder="חיפוש אירוע, מקום או מוכר" value={q} onChange={e=>setQ(e.target.value)}/><button type="button" className="micBtn askBtn" aria-label="שאל את Unstage" onClick={()=>setAskOpen(true)}><Sparkles size={20}/></button>{canListen&&<button type="button" className="micBtn" aria-label="חיפוש בקול" onClick={()=>listen(setQ)}><Mic size={20}/></button>}</label>}
    {(()=>{const rows=tab===1?week:list;const showHero=tab===0&&filt==='next'&&hero&&!q;const rest=showHero?rows.filter(t=>t.key!==hero.key):rows;
-    return <>{showHero&&<Hero t={hero} onOpen={()=>setOpen(hero.key)}/>}
+    return <>{showHero&&<Hero t={hero} press={longPress(hero)}/>}
      {showHero&&rest.length>0&&<h3 className="listH">בהמשך</h3>}
-     <div className="list">{rest.map((t,i)=><Card key={t.key} t={t} i={i} onOpen={()=>setOpen(t.key)}/>)}</div>
+     <div className="list">{rest.map((t,i)=><Card key={t.key} t={t} i={i} press={longPress(t)}/>)}</div>
      {!rest.length&&!showHero&&<section className="panel empty">{tab===1?<CalendarDays size={40}/>:filt==='past'?<History size={40}/>:<TicketIcon size={40}/>}<h2>{q?'לא נמצאו אירועים':tab===1?'אין אירועים השבוע':filt==='past'?'עוד אין אירועים שהיו':'אין אירועים קרובים'}</h2><p>{q?'נסה מילה אחרת.':'כרטיסים חדשים יופיעו כאן לבד.'}</p></section>}</>;})()}</>}
   </>}
   {tab===2&&<Summary list={visible}/>}
   {tab===3&&<SettingsView size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
   {sel&&<Sheet t={sel} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
-  {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()}>
+  {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
    <div className="askHead"><h3><Sparkles size={19}/>שאל את Unstage</h3><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
    <div className="askList" aria-live="polite">{!chat.length&&<div className="askHints">{['מה האירוע הבא שלי?','כמה הוצאתי על כרטיסים השנה?','באיזה שורה אני יושב בהופעה הבאה?','מה יש לי החודש?'].map(h=><button key={h} onClick={()=>ask(h)}>{h}</button>)}</div>}
     {chat.map((m,i)=><p key={i} className={'askMsg '+m.role}>{m.text}</p>)}{asking&&<p className="askMsg model">…</p>}</div>
    <form className="askBar" onSubmit={e=>{e.preventDefault();void ask();}}><input aria-label="השאלה שלך" placeholder="שאל על האירועים שלך" value={askDraft} onChange={e=>setAskDraft(e.target.value)}/>{canListen&&<button type="button" className="ib" aria-label="לשאול בקול" onClick={()=>listen(t=>void ask(t))}><Mic/></button>}<button className="ib" aria-label="שליחה" disabled={!askDraft.trim()||asking}><Send/></button></form>
   </div></div>}
+  {menu&&<div className="menuWrap" onClick={()=>setMenu(null)}><div className="menu" role="dialog" aria-modal="true" aria-label={'פעולות: '+menu.title} onClick={e=>e.stopPropagation()} {...swipeClose(()=>setMenu(null))}><SheetTop close={()=>setMenu(null)}/>
+   <p className="menuTitle">{bidi(menu.title)}</p>
+   {menu.files.filter(f=>!/pkpass/i.test(f.type+f.name)).slice(0,1).map(f=><button key={f.id} onClick={()=>setMenuView(f)}><QrCode size={20}/> הצג כרטיס</button>)}
+   {where(menu)&&<div className="menuNav"><div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(where(menu))+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(where(menu))} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
+   {upcoming(menu)&&!menu.cancelled&&<button onClick={()=>{addToCalendar(menu);setMenu(null);}}><CalendarPlus size={20}/> הוספה ליומן</button>}
+   {menu.order&&<button onClick={()=>{navigator.clipboard?.writeText(menu.order!).then(()=>say('הועתק'),()=>{});setMenu(null);}}><Copy size={20}/> העתק מספר הזמנה</button>}
+   {'share' in navigator&&<button onClick={()=>{navigator.share({title:menu.title,text:[menu.title,longDate(menu)+(timed(menu)?' בשעה '+time(menu):''),place(menu)].filter(Boolean).join('\n')}).catch(()=>{});setMenu(null);}}><Share2 size={20}/> שיתוף</button>}
+   <button onClick={()=>{const k=menu.key;setMenu(null);rename(k);}}><Pencil size={20}/> שינוי שם</button>
+   <button onClick={()=>{const k=menu.key;setMenu(null);hide(k);}}><EyeOff size={20}/> הסתר, זה לא כרטיס</button>
+  </div></div>}
+  {menuView&&<Viewer f={menuView} onClose={()=>{setMenuView(null);setMenu(null);}}/>}
   {toast&&<div className="toast" role="status">{toast}</div>}
   {!sel&&<nav className={(navDrag!==null?'dragging':'')+(tab===3&&navDrag===null?' none':'')} style={{['--tab' as string]:navDrag??tab}} aria-label="ניווט" onTouchStart={e=>navSlide(e,false)} onTouchMove={e=>navSlide(e,true)} onTouchEnd={()=>setNavDrag(null)} onTouchCancel={()=>setNavDrag(null)}>{[['אירועים',TicketIcon],['השבוע',CalendarDays],['סיכום',ChartColumn]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
  </main>;}
 // Hero card like Unbox's: a ring that fills up from the purchase to the event, the date tile, and the event's details.
 function DateTile({t}:{t:Ticket}){const d=when(t);const n=daysTo(t);return <div className={'date'+(n===0?' today':'')} aria-hidden="true"><small>{n===0?'היום':DAY_SHORT[d.getDay()]}</small><b>{d.getDate()}</b><span>{MON_SHORT[d.getMonth()]}{d.getFullYear()!==new Date().getFullYear()?' '+String(d.getFullYear()).slice(2):''}</span></div>;}
-function Hero({t,onOpen}:{t:Ticket;onOpen:()=>void}){const [big,unit]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
+function Hero({t,press}:{t:Ticket;press:Press}){const [big,unit]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
  const at=when(t).getTime();const T=Math.max(.06,Math.min(1,(Date.now()-t.mailed)/Math.max(1,at-t.mailed)));
- return <button className="nextCard nc-ring" onClick={onOpen} aria-label={'האירוע הבא: '+t.title+', '+big+' '+unit}>
+ return <button className="nextCard nc-ring" {...press} aria-label={'האירוע הבא: '+t.title+', '+big+' '+unit}>
   <div className="nc-k nc-top">האירוע הבא · {K.label}</div>
   <div className="nc-row"><svg className="ring" viewBox="0 0 92 92" aria-hidden="true"><defs><linearGradient id="ncg"><stop offset="0" stopColor="#ffd27a"/><stop offset="1" stopColor="#ff9f2e"/></linearGradient></defs>
    <circle cx="46" cy="46" r="40" fill="none" stroke="#ffffff18" strokeWidth="8"/><circle cx="46" cy="46" r="40" fill="none" stroke="url(#ncg)" strokeWidth="8" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C*(1-T)} transform="rotate(-90 46 46)"/>
@@ -171,8 +214,9 @@ function Hero({t,onOpen}:{t:Ticket;onOpen:()=>void}){const [big,unit]=countdown(
   <div className="nc-chips" aria-hidden="true">{timed(t)&&<span>{time(t)}</span>}{place(t)&&<span>{bidi(place(t))}</span>}{t.seats.length>0&&<span>{t.seats.length===1?t.seats[0]:t.seats.length+' מקומות'}</span>}</div>
   {t.files.length>0&&<div className="nc-go"><QrCode size={20}/>הצג כרטיס</div>}
  </button>;}
-function Card({t,i=0,onOpen}:{t:Ticket;i?:number;onOpen:()=>void}){const n=daysTo(t);const K=KIND[t.kind];
- return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} onClick={onOpen} aria-label={t.title+', '+longDate(t)}><div className="c">
+type Press=Record<string,unknown>;
+function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
+ return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press} aria-label={t.title+', '+longDate(t)}><div className="c">
   <DateTile t={t}/>
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
@@ -211,9 +255,9 @@ if(code&&code.includes('ListWidget')){await new AF('r',code)(r)}else{const w=new
 type SrvProps={srv:{enabled:boolean;devices?:number;calendar?:string;widget?:string}|null;push:string;pushMsg:string;onPush:()=>void;onTest:()=>void;onCopy:(t:string)=>void};
 function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan,size,onSize}:{user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void;size:number;onSize:(i:number)=>void}&SrvProps){
  const noDb=srv&&!srv.enabled;
- const speakUrl=srv?.widget?.replace('/api/widget','/api/speak');
+ const slideSize=useRowSlide();const speakUrl=srv?.widget?.replace('/api/widget','/api/speak');
  return <><div className="settings">
-  <div className="set"><h3><Type size={18}/>גודל טקסט</h3><div className="seg" role="radiogroup" aria-label="גודל טקסט">{['רגיל','גדול','גדול מאוד'].map((l,i)=><button key={i} role="radio" aria-checked={size===i} className={size===i?'on':''} onClick={()=>onSize(i)}>{l}</button>)}</div></div>
+  <div className="set"><h3><Type size={18}/>גודל טקסט</h3><div className="seg" role="radiogroup" aria-label="גודל טקסט" {...slideSize(3,onSize)}>{['רגיל','גדול','גדול מאוד'].map((l,i)=><button key={i} role="radio" aria-checked={size===i} className={size===i?'on':''} onClick={()=>onSize(i)}>{l}</button>)}</div></div>
   <div className="set"><h3><Bell size={18}/>התראות</h3>
    <p className="setNote">ערב לפני כל אירוע, שלוש שעות לפני עם הכרטיס מוכן, וכשמגיע כרטיס חדש למייל.</p>
    {noDb?<p className="setNote">השרת עוד לא חובר למסד נתונים.</p>
@@ -242,7 +286,7 @@ function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,on
   <p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. רשימת האירועים נשמרת בטלפון, ועותק שלה בשרת בשביל התזכורות, היומן והווידג'ט. קובצי הכרטיס נפתחים ישירות מהמייל שלך. <a href="/privacy">פרטיות</a></p></div></>;}
 
 // Summary tab: how many events, what kind, where, and what they cost.
-function Summary({list}:{list:Ticket[]}){const y=new Date().getFullYear();const real=list.filter(t=>!t.cancelled);
+function Summary({list}:{list:Ticket[]}){const slide=useRowSlide();const y=new Date().getFullYear();const real=list.filter(t=>!t.cancelled);
  const years=[...new Set(real.map(t=>+t.start.slice(0,4)))].sort((a,b)=>b-a);const [yr,setYr]=useState(years.includes(y)?y:years[0]||y);
  const inYear=real.filter(t=>+t.start.slice(0,4)===yr);const past=inYear.filter(t=>!upcoming(t)).length;
  const money=(p?:string)=>{const m=(p||'').replace(/,/g,'').match(/\d+(?:\.\d+)?/);return p&&/₪/.test(p)&&m?+m[0]:0;};const spent=inYear.reduce((a,t)=>a+money(t.price),0);
@@ -250,7 +294,7 @@ function Summary({list}:{list:Ticket[]}){const y=new Date().getFullYear();const 
  const venues=Object.entries(inYear.reduce((a,t)=>{const v=(t.venue||'').split(' - ')[0].trim();return v?{...a,[v]:(a[v]||0)+1}:a;},{} as Record<string,number>)).sort((a,b)=>b[1]-a[1]).slice(0,5);
  const max=Math.max(1,...kinds.map(k=>k[1]));
  return <><div className="statsWrap">
-  {years.length>1&&<div className="chips">{years.map(v=><button key={v} className={'chip'+(v===yr?' on':'')} onClick={()=>setYr(v)}>{v}</button>)}</div>}
+  {years.length>1&&<div className="seg" role="radiogroup" aria-label="שנה" {...slide(years.length,i=>setYr(years[i]))}>{years.map(v=><button key={v} role="radio" aria-checked={v===yr} className={v===yr?'on':''} onClick={()=>setYr(v)}>{v}</button>)}</div>}
   <div className="statGrid"><div className="stat"><b>{inYear.length}</b><span>אירועים</span></div><div className="stat"><b>{past}</b><span>היו</span></div><div className="stat"><b>{inYear.length-past}</b><span>בדרך</span></div></div>
   {spent>0&&<div className="box"><h3><Wallet/>הוצאות על כרטיסים</h3><div className="moneyBig"><b dir="ltr">₪{Math.round(spent).toLocaleString('he-IL')}</b></div></div>}
   {kinds.length>0&&<div className="box"><h3><TicketIcon/>לפי סוג</h3>{kinds.map(([k,n])=>{const K=KIND[k as Kind];return <div className="kindRow" key={k}><span><K.Icon size={16}/>{K.label}</span><i style={{width:(n/max*100)+'%'}}/><b>{n}</b></div>;})}</div>}
@@ -259,15 +303,15 @@ function Summary({list}:{list:Ticket[]}){const y=new Date().getFullYear();const 
 
 // Full-screen ticket viewer with a close button: a home-screen app has no browser back button.
 // PDFs are drawn page by page (pdf.js from cdnjs), images are shown as they are.
-function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);
+function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const [zoom,setZoom]=useState('');
  useEffect(()=>{if(img){setBusy(false);return;}let off=false;(async()=>{try{
    const lib:any=await import(/* webpackIgnore: true */ 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs' as string);
    lib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
    const data=await (await fetch(fileUrl(f))).arrayBuffer();const pdf=await lib.getDocument({data}).promise;
    for(let n=1;n<=Math.min(pdf.numPages,12)&&!off;n++){const page=await pdf.getPage(n);const w=(box.current?.clientWidth||360)*Math.min(3,devicePixelRatio||2);const vp=page.getViewport({scale:1});const v=page.getViewport({scale:w/vp.width});
-    const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
+    const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';c.onclick=()=>setZoom(c.toDataURL('image/png'));await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
   }catch{setErr('לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
- return <div className="viewer" role="dialog" aria-label="הכרטיס">
+ return <div className="viewer" role="dialog" aria-label="הכרטיס">{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
   <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><a className="ib" href={fileUrl(f)} download={f.name||'ticket'} aria-label="שמירה"><Share2/></a></div>
-  <div className="viewerBody" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס"/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>
+  <div className="viewerBody" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>setZoom(fileUrl(f))}/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>
  </div>;}
