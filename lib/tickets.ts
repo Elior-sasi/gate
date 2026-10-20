@@ -134,7 +134,7 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;const links=ticketLinks(m);
  return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,
   start:dated?String(j.start).slice(0,16):'',doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
-  order:j.eventCancelled?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,
+  order:j.eventCancelled&&!j.order?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,
   cancel:cx?undefined:(()=>{const c=cancelInfo(text,links);const p=typeof j.cancelPolicy==='string'&&j.cancelPolicy.trim()?j.cancelPolicy.trim().slice(0,300):'';return p||c?{...c,text:c?.text||p}:undefined;})()}};}
 export type Read={ticket:Ticket|null;retry:boolean};
 // last: this mail already waited once for Gemini, so the rules' reading is used rather than waiting again.
@@ -144,7 +144,12 @@ export async function readTicket(m:Message,last=false):Promise<Read>{
  const cx=CANCEL.test(header(m,'subject'))&&fromSeller(m);
  if((!TICKETISH.test(header(m,'subject')+'\n'+text)&&!cx)||!looksLikePurchase(m))return {ticket:null,retry:false};
  const ai=await aiTicket(m,text);
- if(ai.ok)return {ticket:ai.ticket?withKey(ai.ticket):null,retry:false};
+ // Gemini and the rules together: the order number the rules found fills in what Gemini left out. A cancellation mail
+ // ("ביטול הזמנה 74593-…") is about that order, so it keeps the number and joins the purchase it cancels.
+ if(ai.ok){let t=ai.ticket;
+  if(!t&&rule?.cancelled&&rule.order)t=rule;
+  if(t&&rule?.order&&(!t.order||t.cancelled))t={...t,order:rule.order};
+  return {ticket:t?withKey(t):null,retry:false};}
  // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).
  if(process.env.GEMINI_API_KEY&&!last)return {ticket:rule?withKey(rule):null,retry:true};
  return {ticket:rule?withKey(rule):null,retry:false};}

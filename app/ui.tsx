@@ -43,7 +43,7 @@ const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'
 // Latin runs (with their dashes, commas and colons) are kept together left-to-right inside Hebrew text: "CHAINSAW MAN – THE MOVIE" stays in one piece.
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
 const NAM=(u:string)=>'gate:names:'+u;
-const KEY=(u:string)=>'gate:v10:'+u;const HID=(u:string)=>'gate:hidden:'+u;
+const KEY=(u:string)=>'gate:v11:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
 function addToCalendar(t:Ticket){const f=document.createElement('form');f.method='POST';f.action='/api/ics';
