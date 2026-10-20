@@ -366,3 +366,8 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .file.all{background:linear-gradient(180deg,#ffd27a,#f5a623);color:#1b1206;border-color:transparent}
 .viewerBody .doc{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
 .docWait{width:100%;max-width:640px;height:150px;border-radius:12px;background:#ffffff0d;animation:docw 1.4s ease-in-out infinite}@keyframes docw{50%{opacity:.4}}
+/* Sending tickets to someone */
+.giftPick{display:grid;gap:8px;margin:6px 0 12px}.giftOpt{display:flex;align-items:center;gap:10px;min-height:52px;padding:0 14px;border-radius:14px;background:#141c25;border:1px solid var(--line);color:var(--ink);font:inherit;font-weight:600;text-align:right}
+.giftOpt.on{border-color:#a77a2c;background:#2a1f0d}.giftOpt small{flex:1;color:var(--mut);font-weight:400;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.giftOpt .chk{width:22px;height:22px;border-radius:7px;border:1.5px solid #6b5420;display:grid;place-items:center;color:#1b1206;flex:none}.giftOpt.on .chk{background:#ffd27a;border-color:#ffd27a}
+.menu>button.primary{justify-content:center;background:linear-gradient(180deg,#ffd27a,#f5a623);color:#1b1206;border-color:transparent;font-weight:700}.menu>button.primary:disabled{opacity:.5}.menu>button.ghost{justify-content:center}

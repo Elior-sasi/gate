@@ -211,7 +211,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   </>}
   {tab===2&&<Summary list={visible}/>}
   {tab===3&&<SettingsView size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
-  {sel&&<Sheet t={sel} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
+  {sel&&<Sheet t={sel} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
   {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
    <div className="askHead"><h3><Sparkles size={19}/>שאל את Unstage</h3><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
    <div className="askList" aria-live="polite">{!chat.length&&<div className="askHints">{['מה האירוע הבא שלי?','כמה הוצאתי על כרטיסים השנה?','באיזה שורה אני יושב בהופעה הבאה?','מה יש לי החודש?'].map(h=><button key={h} onClick={()=>ask(h)}>{h}</button>)}</div>}
@@ -257,6 +257,26 @@ function CancelBox({t}:{t:Ticket}){const s=sellerCancel(t);const text=t.cancel?.
    {tel&&<a className="ghost" href={'tel:'+tel.replace(/-/g,'').replace('*','%2A')}><Smartphone size={18}/><span dir="ltr">{tel}</span></a>}
    {s?.wa&&<a className="ghost" href={'https://wa.me/'+s.wa} target="_blank" rel="noopener noreferrer"><Send size={18}/>וואטסאפ</a>}
    {mail&&<a className="ghost" href={'mailto:'+mail+'?subject='+encodeURIComponent('ביטול הזמנה'+(t.order?' '+t.order.split(', ')[0]:''))}><Mail size={18}/>מייל</a>}</div></div>;}
+// "שלח כרטיס למישהו": pick which tickets, get a personal link that opens only them (no sign-in) and stops after the event.
+function Gift({t,me,onClose}:{t:Ticket;me:string;onClose:()=>void}){const docs=t.files.filter(f=>!/pkpass/i.test(f.type+f.name));const opts=docs.length?docs:[];
+ const [pick,setPick]=useState<Set<number>>(()=>new Set(opts.map((_,i)=>i)));const [busy,setBusy]=useState(false);const [msg,setMsg]=useState('');const [url,setUrl]=useState('');
+ const chosen=opts.filter((_,i)=>pick.has(i));const info=chosen.map(f=>inFile(t,f));const all=chosen.length===opts.length;
+ const seats=all?t.seats:cleanSeats(info.flatMap(x=>x.seats));const count=all?nTickets(t):Math.max(1,info.reduce((a,x)=>a+x.n,0));
+ const make=async()=>{setBusy(true);setMsg('');try{const files=[...chosen,...(all?t.files.filter(f=>/pkpass/i.test(f.type+f.name)):[])].map(f=>({msg:f.msg,id:f.id,name:f.name,type:f.type}));
+   const r=await fetch('/api/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:t.title,kind:t.kind,start:t.start,venue:t.venue,city:t.city,address:t.address,doors:t.doors,seats,count,files,links:opts.length?[]:t.links.slice(0,4),from:me||undefined})});
+   const d=await r.json().catch(()=>({}));if(!r.ok||!d.url)throw new Error(d.error||'לא הצלחתי ליצור קישור');setUrl(d.url);
+   const text=(count>1?count+' כרטיסים ל':'כרטיס ל')+t.title+' - '+longDate(t)+(timed(t)?' בשעה '+time(t):'');
+   if(navigator.share)await navigator.share({title:t.title,text,url:d.url}).catch(()=>{});else{await navigator.clipboard?.writeText(d.url).catch(()=>{});setMsg('הקישור הועתק');}}
+  catch(e){setMsg(e instanceof Error?e.message:'לא הצלחתי ליצור קישור');}finally{setBusy(false);}};
+ return <div className="menuWrap" onClick={onClose}><div className="menu" role="dialog" aria-modal="true" aria-label="שליחת כרטיס" onClick={e=>e.stopPropagation()} {...swipeClose(onClose)}><SheetTop close={onClose}/>
+  <h2 style={{margin:'4px 0 6px',fontSize:'calc(20px*var(--fs))'}}>שליחת כרטיס</h2>
+  <p className="setNote" style={{marginTop:0}}>מי שיקבל את הקישור יראה רק את האירוע הזה ואת הכרטיסים שתבחר, בלי להתחבר. הקישור יפסיק לעבוד אחרי האירוע.</p>
+  {opts.length>1&&<div className="giftPick">{opts.map((f,i)=>{const x=inFile(t,f);const on=pick.has(i);return <button key={f.msg+f.id} className={'giftOpt'+(on?' on':'')} aria-pressed={on} onClick={()=>{const n=new Set(pick);on?n.delete(i):n.add(i);setPick(n);setUrl('');}}>
+   <span className="chk">{on&&<Check size={16}/>}</span><span>{x.n>1?x.n+' כרטיסים':'כרטיס'}</span><small>{seatShort(x.seats)}</small></button>;})}</div>}
+  <button className="primary" disabled={busy||(opts.length>0&&!chosen.length)} onClick={make}><Send size={19}/>{busy?'יוצר קישור…':url?'שלח שוב':'שלח '+(count>1?count+' כרטיסים':'כרטיס')}</button>
+  {url&&<button className="ghost" style={{marginTop:8}} onClick={()=>{void navigator.clipboard?.writeText(url);setMsg('הקישור הועתק');}}><Copy size={18}/>העתקת הקישור</button>}
+  {msg&&<p className="setNote" role="status" style={{textAlign:'center'}}>{msg}</p>}
+ </div></div>;}
 type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
  return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press} aria-label={t.title+', '+longDate(t)}><div className="c">
@@ -264,11 +284,12 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
-function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,me,onClose,onRename,onHide,onCopy}:{t:Ticket;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
   {view&&<Viewer fs={view} onClose={()=>setView(null)}/>}
+  {gift&&<Gift t={t} me={me} onClose={()=>setGift(false)}/>}
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><div className="actions">{typeof navigator!=='undefined'&&'share' in navigator&&<button className="ib" aria-label="שיתוף" onClick={()=>navigator.share({title:t.title,text:[t.title,longDate(t)+(timed(t)?' בשעה '+time(t):''),place(t)].filter(Boolean).join('\n')}).catch(()=>{})}><Share2/></button>}<button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div></div>
   <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2>{bidi(t.title)}</h2>
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
@@ -287,6 +308,7 @@ function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onR
    {t.doors&&<div className="kv"><span>פתיחת דלתות</span><b style={{color:'var(--ink)'}}><DoorOpen size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.doors}</b></div>}</div>}
   {upcoming(t)&&!t.cancelled&&<CancelBox t={t}/>}
   <div className="sheetActions">
+   {upcoming(t)&&!t.cancelled&&(t.files.length>0||t.links.length>0)&&<button className="ghost" onClick={()=>setGift(true)}><Send size={19}/>שלח כרטיס למישהו</button>}
    {upcoming(t)&&!t.cancelled&&<button className="primary" onClick={()=>addToCalendar(t)}><CalendarPlus size={20}/>הוספה ליומן עם תזכורת</button>}
    <a className="ghost" href={'https://mail.google.com/mail/u/0/#all/'+t.thread} target="_blank" rel="noopener"><Mail size={19}/>פתיחת המייל</a></div>
   <button className="textBtn" onClick={onHide}><EyeOff size={16} style={{verticalAlign:-3,marginLeft:6}}/>זה לא כרטיס - הסתר</button>
