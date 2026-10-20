@@ -7,7 +7,7 @@ export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'
 export type TFile={msg:string;id:string;name:string;type:string;size:number};
 export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean};
 export type Ticket={parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
- seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean};
+ seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean;seller?:string;cancel?:{text?:string;url?:string;label?:string}};
 const HE_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const EN_MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
 const pad=(n:number)=>String(n).padStart(2,'0');
@@ -32,13 +32,14 @@ export function eventStart(text:string,mailed:number){const sent=new Date(mailed
  const later=pool.filter(c=>c.when>floor);const best=later.find(c=>c.t)||pool.find(c=>c.t)||later[0]||pool[0];if(!best)return '';
  return best.y+'-'+pad(best.m)+'-'+pad(best.d)+(best.t?'T'+best.t:'');}
 const pick=(text:string,re:RegExp)=>text.match(re)?.[1]?.replace(/\s*\|\s*$/,'').replace(/\s+/g,' ').trim().slice(0,80)||'';
-export function seatsIn(text:string){const out:string[]=[];
- for(const x of text.matchAll(/(?:אזור\s*[:\-]?\s*([\w\u0590-\u05FF'-]{1,12})[\s,|]*)?(?:שורה|row)\s*[:\-]?\s*(\w{1,4})[\s,|]*(?:כי?סאות|מושבים|seats)\s*[:\-]?\s*(\d{1,4})\s*[-–]\s*(\d{1,4})/gi)){const a=+x[3],b=+x[4];if(b>=a&&b-a<12)for(let n=a;n<=b;n++){const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+n;if(!out.includes(s))out.push(s);}}
- for(const x of text.matchAll(/(?:(?:אזור|יציע|גוש|section|block)\s*[:\-]?\s*([\w֐-׿'-]{1,12})[\s,|]*)?(?:שורה|row)\s*[:\-]?\s*(\w{1,4})[\s,|]*(?:כי?סא|מושב|מקום|seat)\s*[:\-]?\s*(\d{1,4})/gi)){
+export function seatsIn(text:string){const out:string[]=[];const S='[\\s:\\-|,]*';
+ // Ranges: "כיסאות: 5 - 6", "כיסא | 14-15", "Seats: 7 - 9".
+ for(const x of text.matchAll(new RegExp('(?:אזור'+S+"([\\w\\u0590-\\u05FF'-]{1,12})[\\s,|]*)?(?:שורה|row)"+S+'(\\w{1,4})[\\s,|]*(?:כי?סא(?:ות)?|מושבים|מקומות|seats?)'+S+'(\\d{1,4})\\s*[-–]\\s*(\\d{1,4})','gi'))){const a=+x[3],b=+x[4];if(b>=a&&b-a<12)for(let n=a;n<=b;n++){const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+n;if(!out.includes(s))out.push(s);}}
+ for(const x of text.matchAll(new RegExp("(?:(?:אזור|יציע|גוש|section|block)"+S+"([\\w\\u0590-\\u05FF'-]{1,12})[\\s,|]*)?(?:שורה|row)"+S+'(\\w{1,4})[\\s,|]*(?:כי?סא|מושב|מקום|seat)'+S+'(\\d{1,4})(?!\\d|\\s*[-–]\\s*\\d)','gi'))){
   const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+x[3];if(!out.includes(s))out.push(s);}
  return out.slice(0,12);}
 const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?(?:הזמנה|רכישה)|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
-export function cleanTitle(s:string){let t=s.replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
+export function cleanTitle(s:string){let t=s.replace(/\s*\((?:GO-OUT|Eventer|Tixwise|Smarticket|Eventim)\)\s*$/i,'').replace(/\s*\|\s*/g,' | ').replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
 export function kindOf(subject:string,text:string):Kind{const k=guessKind(subject);if(k!=='other')return k;const b=guessKind(text.slice(0,1500));return b==='lecture'?'other':b;}
 export function guessKind(t:string):Kind{
  // Cinematheques also host talks: a lecture is a lecture even when it is at a cinema.
@@ -69,28 +70,43 @@ export function looksLikePurchase(m:Message){const subject=header(m,'subject'),f
  const d=domainOf(from);return SELLERS.test(d)||d.split('.').some(x=>/^(?:tickets?|tix|cinema|kupat)$/.test(x))||PURCHASE.test(subject);}
 const NOT_TICKET=/טיסה|flight|boarding pass|מלון|hotel|booking\.com|airbnb|השכרת רכב|רכבת ישראל|משלוח|shipped|parcel|חבילה|קבלה על תרומה|newsletter|ניוזלטר/i;
 // Rule-based reading, used without a Gemini key and as the fallback when Gemini is busy.
+// A cell or line value after a label: "אירוע | X", "Venue\nX", "מקום: X".
+const field=(text:string,labels:string)=>pick(text,new RegExp('(?:^|\\n)\\s*(?:'+labels+')\\s*(?:[:\\-|]\\s*|\\n)([^\\n|]{2,90})','i'));
+// The cancellation terms as the mail states them, and the link it gives for cancelling or managing the order.
+export function cancelInfo(text:string,links:{label:string;url:string}[]){const lines=text.split('\n');let out='';
+ for(let i=0;i<lines.length&&!out;i++){const l=lines[i];if(/ניתן לבטל|מדיניות ביטול|ביטול עסקה|ביטול הזמנ|ביטול כרטיס|לבטל את ההזמנה|can be cancel|cancellation policy|refund policy/i.test(l)&&!/בוטלה בהצלחה|הזמנתך בוטלה/.test(l))
+  out=(l.length<30&&lines[i+1]?l+' '+lines[i+1]:l);}
+ out=out.replace(/^(?:שימו לב!?|לתשומת לב(?:כם)?!?)\s*/,'').replace(/\s*ניתן לקרוא את מדיניות.*$/,'').trim().slice(0,420);
+ const link=links.find(l=>/ביטול|ניהול (?:ה)?הזמנה|cancel|manage|booking management|refund/i.test(l.label+' '+l.url));
+ return out||link?{text:out||undefined,url:link?.url,label:link?.label}:undefined;}
+export const sellerOf=(m:Message)=>(header(m,'from').match(/@([\w.-]+)>?\s*$/)?.[1]||'').toLowerCase().replace(/^(?:e?mail|email|news|noreply|service|tickets?)\./,'');
+// Rule-based reading, used without a Gemini key and as the fallback when Gemini is busy.
 export function ruleTicket(m:Message,text:string):Ticket|null{
  const subject=header(m,'subject');const mailed=+(m.internalDate||Date.now());const all=subject+'\n'+text;
- if(!TICKETISH.test(all)||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
- const cancelled=CANCEL.test(subject);const start=eventStart(text,mailed)||eventStart(subject,mailed)||'';if(!start&&!cancelled)return null;
- const lines=text.split('\n').map(l=>l.replace(/[|#*]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
- // Many sellers title the mail with the venue ("סינמטק ירושלים - אישור הזמנה") and write the event as a line followed by "ב<venue>".
- const at=lines.findIndex(l=>/^ב(?:סינמטק|סינמה|קולנוע|תיאטרון|היכל|אולם|מוזיאון|בית|זאפה|בארבי|מועדון|מרכז|גני|פארק|אמפי|האנגר|רידינג)/.test(l));
- const named=at>0&&lines[at-1].length<=80&&!/[:]|הזמנה|כרטיס/.test(lines[at-1])?lines[at-1]:'';
- const title=named||cleanTitle(subject);const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
- const hour=start&&!start.includes('T')&&pick(text,/בשעה\s*[-:]?\s*(\d{1,2}:\d{2})/);
- if(!fromSeller(m)&&!files.length&&!seatsIn(text).length&&!/כרטיס|ticket|הופעה|הצגה|הקרנה|מופע|כנס|הרצאה/i.test(subject))return null;
- const k=guessKind(title);
+ const cancelled=CANCEL.test(subject)&&!/אישור (?:הזמנה|רכישה)|confirmation/i.test(subject);
+ if((!TICKETISH.test(all)&&!(cancelled&&fromSeller(m)))||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
+ const lines=text.split('\n').map(l=>l.replace(/^[\s|#*]+|[\s|#*]+$/g,'')).filter(Boolean);
+ // A table row "30/4/2026 19:45 | <film> | אולם 15 | 1 | שורה..." (Planet and others).
+ const row=text.match(/(\d{1,2}[./]\d{1,2}[./]\d{2,4})\s+(\d{1,2}:\d{2})\s*\|\s*([^|\n]{2,100}?)\s*\|\s*([^|\n]{1,40}?)\s*\|/);
+ const start=eventStart(text,mailed)||eventStart(subject,mailed)||'';if(!start&&!cancelled)return null;
+ // PRES.global mails (Cinema City, cinematheques): "<event>\nב<venue>\nביום - …\nבשעה - …".
+ const day=lines.findIndex(l=>/^ביום\s*[-:]/.test(l));const pres=day>=2&&/^ב\S/.test(lines[day-1])?day:-1;
+ const named=pres>0?lines[pres-2]:field(text,'אירוע|שם (?:ה)?(?:אירוע|מופע|הצגה|סרט)|הצגה|מופע|event')||(row?row[3]:'');
+ const title=(named&&named.length<=90&&!/הזמנה|תודה|מודים|שלום/.test(named)?named:'')||cleanTitle(subject);
+ const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
+ const hour=start&&!start.includes('T')&&pick(text,/(?:בשעה|שעה|at)\s*[-:|]?\s*(\d{1,2}:\d{2})/i);
+ if(!cancelled&&!fromSeller(m)&&!files.length&&!seatsIn(text).length&&!/כרטיס|ticket|הופעה|הצגה|הקרנה|מופע|כנס|הרצאה/i.test(subject))return null;
+ const k=guessKind(title);const links=ticketLinks(m);const thanks=pick(text,/תודה על הזמנתך ב([^\n.]{3,40})/);
  return {key:'',msgs:[m.id],thread:m.threadId,title,kind:k!=='other'?k:kindOf(subject,text),start:hour?start+'T'+hour.padStart(5,'0'):start,
-  doors:pick(text,/(?:פתיחת (?:דלתות|שערים)|doors open)\s*[:\-]?\s*(\d{1,2}:\d{2})/i)||undefined,
-  venue:pick(text,/(?:^|\n)\s*(?:מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location)\s*[:\-]\s*([^\n]{3,80})/i)||(named?lines[at].slice(1):undefined),
-  address:pick(text,/(?:^|\n)\s*(?:כתובת|address)\s*[:\-]\s*([^\n]{4,80})/i)||undefined,
+  doors:pick(text,/(?:פתיחת (?:דלתות|שערים)|doors open)\s*[:\-|]?\s*(\d{1,2}:\d{2})/i)||undefined,
+  venue:(pres>0?lines[pres-1].slice(1).trim():'')||field(text,'מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location')||(thanks?thanks+(row?' - '+row[4]:''):'')||undefined,
+  address:field(text,'כתובת|address')||undefined,
   // The same seat is often written twice (Hebrew and English parts of one mail).
-  seats:cleanSeats(seatsIn(text)),count:Number(pick(text,/(?:מספר כרטיסים|סה["״]?כ כרטיסים(?: בהזמנה)?|כמות(?: כרטיסים)?|quantity|tickets?)\s*[:\-x×]\s*(\d{1,2})\b/i))||undefined,
-  order:pick(text,/(?:מס['׳]?\s*(?:ה)?הזמנה|מספר (?:ה)?הזמנה|order\s*(?:no\.?|number|#)|booking\s*(?:ref(?:erence)?|no\.?|#))\s*[:#\-]?\s*([A-Z0-9-]{4,24})/i)||pick(text,/(?:אישור הזמנה|booking confirmation)[\s|#]*(\d[\d-]{5,24})/i)||undefined,
-  provider:header(m,'from').replace(/<.*>/,'').replace(/"/g,'').trim()||undefined,
-  price:pick(text,/(?:סה["״]?כ(?: לתשלום)?|total)\s*[:\-]?\s*(₪\s?[\d,.]+|[\d,.]+\s?₪|[$€£]\s?[\d,.]+)/i)||undefined,
-  files,links:ticketLinks(m),mailed,cancelled};}
+  seats:cleanSeats(seatsIn(text)),count:Number(pick(text,/(?:מספר כרטיסים|סה["״]?כ כרטיסים(?: בהזמנה)?|כמות(?: כרטיסים)?|quantity)\s*[:\-x×|]\s*(\d{1,2})\b/i)||pick(text,/(?:^|\n)\s*(\d{1,2})\s+כרטיסים\s*(?:\n|$)/))||undefined,
+  order:pick(text,/(?:מס['׳]?\s*(?:ה)?הזמנה|מספר (?:ה)?הזמנה|order\s*(?:id|no\.?|number|#)|booking\s*(?:ref(?:erence)?|no\.?|#))\s*[:#\-|]?\s*([A-Z0-9-]{4,24})/i)||pick(text,/(?:אישור הזמנה|ביטול הזמנה|booking confirmation)\s*\n?\s*#?\s*(\d[\d-]{5,24})/i)||pick(text,/(?:^|\n)מס["״]ד\s*[|:]\s*(\d{4,12})/)||undefined,
+  provider:header(m,'from').replace(/<.*>/,'').replace(/"/g,'').trim()||undefined,seller:sellerOf(m)||undefined,
+  price:pick(text,/(?:סה["״]?כ(?: תשלום)?(?: בהזמנה)?(?: לתשלום)?|סכום כולל ששולם|total)\s*[:\-|]?\s*(₪\s?[\d,.]+|[\d,.]+\s?₪|[$€£]\s?[\d,.]+)/i)||undefined,
+  files,links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),cancel:cancelled?undefined:cancelInfo(text,links),mailed,cancelled};}
 const SCHEMA={type:'OBJECT',properties:{
  isTicket:{type:'BOOLEAN',description:'true for tickets/booking confirmations for an event (concert, show, movie, sport, festival, stand-up, lecture), and also for a mail cancelling or refunding such tickets or saying such an event was cancelled. false for flights, hotels, shop orders, marketing, newsletters.'},
  title:{type:'STRING',description:'Short event name as people say it, in the language used in the mail (Hebrew preferred): the film, show, artist or lecture title - not the cinema or venue name. No words like "אישור הזמנה" or order numbers.'},
@@ -102,6 +118,7 @@ const SCHEMA={type:'OBJECT',properties:{
  count:{type:'INTEGER',description:'Number of tickets in this order (e.g. "סה\"כ כרטיסים בהזמנה: 2")'},order:{type:'STRING',description:'Order/booking number'},
  provider:{type:'STRING',description:'Ticket seller or cinema chain'},price:{type:'STRING',description:'Total paid with currency sign'},
  cancelled:{type:'BOOLEAN',description:'true only if this mail itself says the tickets/order were cancelled or refunded, or the event was cancelled. false for a normal purchase, a reminder, or a mail that only explains the refund policy.'},
+ cancelPolicy:{type:'STRING',description:'Only if the mail states it: how and until when these tickets can be cancelled (deadline, fee, where: link/phone/email), in short Hebrew. Empty if the mail says nothing about cancelling.'},
  eventCancelled:{type:'BOOLEAN',description:'true if the whole event was cancelled by the organiser (not just this order)'}},required:['isTicket']};
 export type AiResult={ok:true;ticket:Ticket|null}|{ok:false};
 export async function aiTicket(m:Message,text:string):Promise<AiResult>{
@@ -114,16 +131,18 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  const cx=!!j.cancelled||!!j.eventCancelled;const dated=/^\d{4}-\d{2}-\d{2}/.test(String(j.start||''));
  // A cancellation may leave out the date: it is kept only to be joined to the event it cancels (by order number or name).
  if(!j.isTicket||(!dated&&!cx))return {ok:true,ticket:null};
- const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;
+ const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;const links=ticketLinks(m);
  return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,
   start:dated?String(j.start).slice(0,16):'',doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
-  order:j.eventCancelled?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:ticketLinks(m),mailed,ai:true,cancelled:cx}};}
+  order:j.eventCancelled?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,
+  cancel:cx?undefined:(()=>{const c=cancelInfo(text,links);const p=typeof j.cancelPolicy==='string'&&j.cancelPolicy.trim()?j.cancelPolicy.trim().slice(0,300):'';return p||c?{...c,text:c?.text||p}:undefined;})()}};}
 export type Read={ticket:Ticket|null;retry:boolean};
 // last: this mail already waited once for Gemini, so the rules' reading is used rather than waiting again.
 export async function readTicket(m:Message,last=false):Promise<Read>{
  const text=bodyText(m);const rule=ruleTicket(m,text);
  // Mail with no ticket words at all is skipped without spending a Gemini call.
- if(!TICKETISH.test(header(m,'subject')+'\n'+text)||!looksLikePurchase(m))return {ticket:null,retry:false};
+ const cx=CANCEL.test(header(m,'subject'))&&fromSeller(m);
+ if((!TICKETISH.test(header(m,'subject')+'\n'+text)&&!cx)||!looksLikePurchase(m))return {ticket:null,retry:false};
  const ai=await aiTicket(m,text);
  if(ai.ok)return {ticket:ai.ticket?withKey(ai.ticket):null,retry:false};
  // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).

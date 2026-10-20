@@ -4,6 +4,7 @@ import {signOut} from 'next-auth/react';
 import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
 import {mergeAll,status} from '@/lib/combine';
+import {sellerCancel,contacts,LAW} from '@/lib/sellers';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
 const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},other:{label:'אירוע',Icon:TicketIcon}};
@@ -33,7 +34,7 @@ const showLabel=(t:Ticket)=>nTickets(t)>1?'הצג '+nTickets(t)+' כרטיסים
 const fileLabel=(f:TFile,i:number,n:number)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):'כרטיס'+(n>1?' '+(i+1):'');
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":-]*[A-Za-z0-9)]/g,m=>'⁦'+m+'⁩');
 const NAM=(u:string)=>'gate:names:'+u;
-const KEY=(u:string)=>'gate:v8:'+u;const HID=(u:string)=>'gate:hidden:'+u;
+const KEY=(u:string)=>'gate:v9:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
 function addToCalendar(t:Ticket){const f=document.createElement('form');f.method='POST';f.action='/api/ics';
@@ -221,6 +222,17 @@ function Hero({t,press}:{t:Ticket;press:Press}){const [big,unit]=countdown(t);co
   <div className="nc-chips" aria-hidden="true">{timed(t)&&<span>{time(t)}</span>}{place(t)&&<span>{bidi(place(t))}</span>}{t.seats.length>0&&<span>{t.seats.length===1?t.seats[0]:t.seats.length+' מקומות'}</span>}</div>
   {t.files.length>0&&!t.cancelled&&<div className="nc-go"><QrCode size={20}/>{showLabel(t)}</div>}
  </button>;}
+// Cancelling: the terms as the mail states them (or the seller's, or the law's), the deadline, and a way to do it.
+function CancelBox({t}:{t:Ticket}){const s=sellerCancel(t);const text=t.cancel?.text||s?.note||LAW.note;const url=t.cancel?.url||s?.url||(!t.cancel?.text&&!s?LAW.url:undefined);
+ const label=t.cancel?.url?(t.cancel.label&&t.cancel.label.length<24?t.cancel.label:'לביטול ההזמנה'):s?.label||LAW.label;const c=contacts(t.cancel?.text||'');const tel=s?.tel||c.tel;const mail=s?.mail||c.mail;
+ const end=s?.hours&&t.start.includes('T')?new Date(when(t).getTime()-s.hours*36e5):null;const late=!!end&&end.getTime()<Date.now();
+ return <div className="box cancelBox"><h3><RotateCcw/>ביטול</h3>
+  {end&&<p className={'cxWhen'+(late?' late':'')}>{late?'עבר המועד לביטול':'אפשר לבטל עד '+end.toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'numeric'})+' בשעה '+end.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'})}</p>}
+  <p className="setNote">{text}</p>
+  <div className="cxBtns">{url&&<a className="ghost" href={url} target="_blank" rel="noopener noreferrer"><ExternalLink size={18}/>{label}</a>}
+   {tel&&<a className="ghost" href={'tel:'+tel.replace(/-/g,'').replace('*','%2A')}><Smartphone size={18}/><span dir="ltr">{tel}</span></a>}
+   {s?.wa&&<a className="ghost" href={'https://wa.me/'+s.wa} target="_blank" rel="noopener noreferrer"><Send size={18}/>וואטסאפ</a>}
+   {mail&&<a className="ghost" href={'mailto:'+mail+'?subject='+encodeURIComponent('ביטול הזמנה'+(t.order?' '+t.order.split(', ')[0]:''))}><Mail size={18}/>מייל</a>}</div></div>;}
 type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
  return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press} aria-label={t.title+', '+longDate(t)}><div className="c">
@@ -248,6 +260,7 @@ function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onR
    {t.count&&<div className="kv"><span>{t.count===1?'כרטיס':'כרטיסים'}</span><b style={{color:'var(--ink)'}}><Users size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.count}</b></div>}
    {t.price&&<div className="kv"><span>שולם</span><b style={{color:'var(--ink)'}} dir="ltr">{t.price}</b></div>}
    {t.doors&&<div className="kv"><span>פתיחת דלתות</span><b style={{color:'var(--ink)'}}><DoorOpen size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.doors}</b></div>}</div>}
+  {upcoming(t)&&!t.cancelled&&<CancelBox t={t}/>}
   <div className="sheetActions">
    {upcoming(t)&&!t.cancelled&&<button className="primary" onClick={()=>addToCalendar(t)}><CalendarPlus size={20}/>הוספה ליומן עם תזכורת</button>}
    <a className="ghost" href={'https://mail.google.com/mail/u/0/#all/'+t.thread} target="_blank" rel="noopener"><Mail size={19}/>פתיחת המייל</a></div>

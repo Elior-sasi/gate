@@ -37,7 +37,8 @@ export function combine(o:Ticket,t:Ticket):Ticket{
  return {...best,parts:kept,seats:tot.seats,count:tot.count,price:tot.price??best.price,order:tot.orders.length>1?tot.orders.join(', '):best.order||tot.orders[0],
   start:t.start.length>o.start.length?t.start:o.start.length>t.start.length?o.start:best.start,
   msgs:[...new Set([...o.msgs,...t.msgs])],files:[...o.files,...t.files.filter(f=>!o.files.some(g=>g.id===f.id||(g.name===f.name&&g.size===f.size)))].slice(0,12),
-  links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))].slice(0,4),cancelled:status(parts).cancelled,mailed:Math.max(o.mailed,t.mailed)};}
+  links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))].slice(0,4),cancelled:status(parts).cancelled,mailed:Math.max(o.mailed,t.mailed),
+  seller:best.seller||o.seller||t.seller,cancel:best.cancel?.text||best.cancel?.url?best.cancel:(o.cancel?.text||o.cancel?.url?o.cancel:t.cancel)};}
 // Same event: same order, a shared mail, or the same title at the same time.
 // A cancellation without a date joins the event with the same order number, or the same name.
 const ordersOf=(t:Ticket)=>Object.values(partsOf(t)).map(p=>p.order&&norm(p.order)).filter(Boolean) as string[];

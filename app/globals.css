@@ -358,3 +358,6 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 
 .sheet{overflow-x:hidden}.sheet>*{max-width:min(608px,100%)}.box,.stub{min-width:0;overflow-wrap:anywhere}
 .kv .copy b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Cancelling */
+.cancelBox .cxWhen{margin:2px 0 4px;font-weight:700;color:var(--ink)}.cancelBox .cxWhen.late{color:var(--bad)}
+.cxBtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.cxBtns a{flex:1 1 140px;min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:14px;text-decoration:none}

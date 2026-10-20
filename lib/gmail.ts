@@ -20,10 +20,12 @@ export type Message={id:string;threadId:string;internalDate?:string;payload?:Par
 export const header=(m:Message,name:string)=>m.payload?.headers?.find(h=>h.name.toLowerCase()===name.toLowerCase())?.value||'';
 const decode=(d?:string)=>d?Buffer.from(d,'base64url').toString('utf8'):'';
 const ENT:Record<string,string>={nbsp:' ',amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",rlm:'',lrm:'',zwnj:'',zwj:''};
+// HTML mail as lines of text: one line per row or paragraph, table cells joined with " | ", layout-only lines dropped.
 export function htmlText(h:string){
- return h.replace(/<(script|style|head)[\s\S]*?<\/\1>/gi,' ').replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|table)>/gi,'\n').replace(/<\/t[dh]>/gi,' | ').replace(/<[^>]+>/g,' ')
+ return h.replace(/<!--[\s\S]*?-->/g,' ').replace(/<(script|style|head)[\s\S]*?<\/\1>/gi,' ').replace(/\s+/g,' ')
+  .replace(/<br\s*\/?>|<\/(p|div|tr|li|h\d|table|tbody)>|<(p|div|tr|li|h\d|table)\b[^>]*>/gi,'\n').replace(/<\/t[dh]>/gi,' | ').replace(/<[^>]+>/g,'')
   .replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(+n)).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCodePoint(parseInt(n,16))).replace(/&([a-z]+);/gi,(m,n)=>ENT[n.toLowerCase()]??m)
-  .replace(/[ \t ]+/g,' ').replace(/ ?\n ?/g,'\n').replace(/\n{3,}/g,'\n\n').trim();}
+  .replace(/[‎‏]/g,'').split('\n').map(l=>l.replace(/[ \t ]+/g,' ').replace(/(?:\s*\|\s*)+/g,' | ').replace(/^[\s|]+|[\s|]+$/g,'')).filter(Boolean).join('\n');}
 // The readable text of a message: the plain part when it has real content, else the HTML part flattened.
 export function bodyText(m:Message){let plain='',html='';
  const walk=(p?:Part)=>{if(!p)return;if(!p.filename){if(p.mimeType==='text/plain'&&!plain)plain=decode(p.body?.data);else if(p.mimeType==='text/html'&&!html)html=decode(p.body?.data);}p.parts?.forEach(walk);};walk(m.payload);
@@ -31,8 +33,8 @@ export function bodyText(m:Message){let plain='',html='';
 // Links in the mail that open the ticket on the seller's site ("לצפייה בכרטיס", "View tickets").
 export function ticketLinks(m:Message){let html='';const walk=(p?:Part)=>{if(!p)return;if(p.mimeType==='text/html'&&!html)html=decode(p.body?.data);p.parts?.forEach(walk);};walk(m.payload);
  const out:{label:string;url:string}[]=[];for(const a of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){const label=htmlText(a[2]).replace(/\s+/g,' ').trim();
-  if(/^https:\/\//.test(a[1])&&label.length<40&&/כרטיס|ticket|הזמנה שלי|צפייה בהזמנה|view order|wallet|ארנק/i.test(label)&&!/unsubscribe|הסר/i.test(label)&&!out.some(o=>o.url===a[1]))out.push({label,url:a[1].replace(/&amp;/g,'&')});}
- return out.slice(0,3);}
+  if(/^https?:\/\//.test(a[1])&&label.length<40&&/כרטיס|ticket|הזמנה שלי|צפייה בהזמנה|view order|wallet|ארנק|ביטול|ניהול (?:ה)?הזמנה|cancel|manage|booking management/i.test(label)&&!/unsubscribe|הסר/i.test(label)&&!out.some(o=>o.url===a[1]))out.push({label,url:a[1].replace(/&amp;/g,'&')});}
+ return out.slice(0,5);}
 export type File={id:string;name:string;type:string;size:number};
 // Ticket files: PDFs, Apple Wallet passes and barcode/QR images (logos and tiny pictures are left out).
 export function ticketFiles(m:Message):File[]{const out:File[]=[];
