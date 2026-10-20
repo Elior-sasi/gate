@@ -363,7 +363,8 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .cxBtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.cxBtns a{flex:1 1 140px;min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:14px;text-decoration:none}
 /* Ticket file buttons: the count stays whole, the seats give way. "Show all" first, in gold. */
 .file span{flex:0 1 auto}.file small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.file.all{background:linear-gradient(180deg,#ffd27a,#f5a623);color:#1b1206;border-color:transparent}
+/* "הצג הכל" looks exactly like the "הצג כרטיסים" button on the next-event card. */
+.file.all{background:#ffb547;color:#2a1800;border-color:transparent;justify-content:center;gap:8px;font-weight:700;border-radius:16px;min-height:50px}.file.all span{flex:none}
 .viewerBody .doc{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
 .docWait{width:100%;max-width:640px;height:150px;border-radius:12px;background:#ffffff0d;animation:docw 1.4s ease-in-out infinite}@keyframes docw{50%{opacity:.4}}
 /* Sending tickets to someone */
