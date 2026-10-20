@@ -335,7 +335,7 @@ function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' 
 async function shareFiles(fs:TFile[]){try{const files=await Promise.all(fs.map(async f=>{const blob=await (await fetch(fileUrl(f))).blob();return new File([blob],f.name||'ticket.pdf',{type:blob.type||f.type});}));
  if(navigator.canShare?.({files})){await navigator.share({files});return;}for(const file of files){const u=URL.createObjectURL(file);const a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),4000);}}catch{}}
 // One ticket file inside the viewer: PDFs drawn page by page (pdf.js from this site), images as they are.
-function Doc({f,onZoom}:{f:TFile;onZoom:(src:string)=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
+function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boolean}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
  useEffect(()=>{if(img){setBusy(false);return;}let off=false;(async()=>{try{
    const res=await fetch(fileUrl(f),{cache:'no-store'});if(!res.ok)throw new Error(res.status===401||res.status===403?'auth':'file');
    const data=await res.arrayBuffer();blob.current=new Blob([data],{type:'application/pdf'});const lib=await pdfLib().catch(()=>null);if(!lib)throw new Error('lib');
@@ -348,10 +348,10 @@ function Doc({f,onZoom}:{f:TFile;onZoom:(src:string)=>void}){const box=useRef<HT
    if(blob.current&&!off){setFrame(URL.createObjectURL(blob.current));return;}
    setErr(why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
  useEffect(()=>()=>{if(frame)URL.revokeObjectURL(frame);},[frame]);
- return <div className="doc" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
+ return <div className="doc" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&(first?<div className="loader"><Mark cls="lmark" anim="bob"/><p>{'פותח את הכרטיס…'}</p></div>:<div className="docWait" aria-hidden="true"/>)}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
 // Full-screen ticket viewer with a close button (a home-screen app has no browser back button): one file, or all of an event's tickets one under the other.
 function Viewer({fs,onClose}:{fs:TFile[];onClose:()=>void}){const [zoom,setZoom]=useState('');
  return <div className="viewer" role="dialog" aria-label={fs.length>1?'כל הכרטיסים':'הכרטיס'}>{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
   <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><button className="ib" aria-label="שמירה או שיתוף" onClick={()=>void shareFiles(fs)}><Share2/></button></div>
-  <div className="viewerBody">{fs.map(f=><Doc key={f.msg+f.id} f={f} onZoom={setZoom}/>)}</div>
+  <div className="viewerBody">{fs.map((f,i)=><Doc key={f.msg+f.id} f={f} onZoom={setZoom} first={i===0}/>)}</div>
  </div>;}

@@ -365,3 +365,4 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .file span{flex:0 1 auto}.file small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .file.all{background:linear-gradient(180deg,#ffd27a,#f5a623);color:#1b1206;border-color:transparent}
 .viewerBody .doc{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
+.docWait{width:100%;max-width:640px;height:150px;border-radius:12px;background:#ffffff0d;animation:docw 1.4s ease-in-out infinite}@keyframes docw{50%{opacity:.4}}
