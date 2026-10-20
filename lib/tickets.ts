@@ -5,7 +5,7 @@ import {mergeAll} from '@/lib/combine';
 import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
 export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'other';
 export type TFile={msg:string;id:string;name:string;type:string;size:number};
-export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean};
+export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean};
 export type Ticket={parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
  seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean};
 const HE_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
@@ -55,13 +55,16 @@ const TICKETISH=/כרטיס|ticket|הזמנת מקומות|שורה|row|מושב
 export const SELLERS=/(?:leaan|eventim|tixwise|zappa-club|barby|eventer|smarticket|tickchak|go-out|bimot|hatarbut|kupat|habima|cameri|gesher-theatre|beitlessin|israel-opera|ipo|tmu-na|hasimta|cinema-city|yesplanet|planetcinema|lev|hotcinema|rav-hen|globusmax|cinema|jer-cin|cinematheque|eventbuzz|ticketmaster|eventbrite|dice|seetickets|livenation|axs|stubhub|viagogo|tickets|mytickets|tix|ticketsi)\.(?:co\.il|org\.il|com|co|fm|il|org|co\.uk)$/i;
 const PURCHASE=/אישור (?:ה)?(?:הזמנה|רכישה)|הזמנת(?:ך)? (?:כרטיסים|מקומות)|הכרטיס(?:ים)? שלך|הכרטיסים (?:ל|עבור)|כרטיס(?:ים)? (?:ל|עבור)(?:הופעה|הצגה|סרט|אירוע)|your (?:e-?)?tickets?|tickets? (?:for|confirmation)|booking confirm|order confirm|e-?ticket|purchase confirm/i;
 const MARKETING=/פרסומת|שיווקי|ניוזלטר|newsletter|עדכון שבועי|עדכוני |מבצע|המלצות|הנחה|במחיר מיוחד|כרטיסים אחרונים|sale\b|promo/i;
-const NOT_PURCHASE=/החזר כספי|refund|טופס|forms|צפייה בפרטי כרטיס|כרטיס (?:אשראי|האשראי)|credit card/i;
+// A cancellation or refund of tickets: kept apart from purchases, and joined to the event it cancels.
+export const CANCEL=/בוטל|בוטלה|בוטלו|ביטול|מבוטל|החזר כספי|זיכוי|cancel+(?:ed|ation)|refund/i;
+const NOT_PURCHASE=/טופס|forms|צפייה בפרטי כרטיס|כרטיס (?:אשראי|האשראי)|credit card/i;
 const domainOf=(from:string)=>(from.match(/@([\w.-]+)>?\s*$/)?.[1]||'').toLowerCase();
 const addr=(h:string)=>(h.match(/[\w.+-]+@[\w.-]+/)?.[0]||'').toLowerCase();
 // Strong enough to be a purchase: from a ticket seller, or titled like a purchase - and not marketing, mail to yourself, or a card/forms notice.
 export const fromSeller=(m:Message)=>{const d=domainOf(header(m,'from'));return SELLERS.test(d)||d.split('.').some(x=>/^(?:tickets?|tix|cinema|kupat)$/.test(x));};
 export function looksLikePurchase(m:Message){const subject=header(m,'subject'),from=header(m,'from');
  if(MARKETING.test(subject)||NOT_PURCHASE.test(subject))return false;
+ if(CANCEL.test(subject)&&!/כרטיס|ticket|הזמנ|order|booking|אירוע|הופעה|הצגה|מופע|הקרנה|event|show/i.test(subject)&&!fromSeller(m))return false;
  if(addr(from)&&addr(from)===addr(header(m,'to')))return false;
  const d=domainOf(from);return SELLERS.test(d)||d.split('.').some(x=>/^(?:tickets?|tix|cinema|kupat)$/.test(x))||PURCHASE.test(subject);}
 const NOT_TICKET=/טיסה|flight|boarding pass|מלון|hotel|booking\.com|airbnb|השכרת רכב|רכבת ישראל|משלוח|shipped|parcel|חבילה|קבלה על תרומה|newsletter|ניוזלטר/i;
@@ -69,7 +72,7 @@ const NOT_TICKET=/טיסה|flight|boarding pass|מלון|hotel|booking\.com|airb
 export function ruleTicket(m:Message,text:string):Ticket|null{
  const subject=header(m,'subject');const mailed=+(m.internalDate||Date.now());const all=subject+'\n'+text;
  if(!TICKETISH.test(all)||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
- const start=eventStart(text,mailed)||eventStart(subject,mailed);if(!start)return null;
+ const cancelled=CANCEL.test(subject);const start=eventStart(text,mailed)||eventStart(subject,mailed)||'';if(!start&&!cancelled)return null;
  const title=cleanTitle(subject);const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
  if(!fromSeller(m)&&!files.length&&!seatsIn(text).length&&!/כרטיס|ticket|הופעה|הצגה|הקרנה|מופע|כנס|הרצאה/i.test(subject))return null;
  return {key:'',msgs:[m.id],thread:m.threadId,title,kind:kindOf(subject,text),start,
@@ -80,18 +83,19 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
   order:pick(text,/(?:מס['׳]?\s*(?:ה)?הזמנה|מספר (?:ה)?הזמנה|order\s*(?:no\.?|number|#)|booking\s*(?:ref(?:erence)?|no\.?|#))\s*[:#\-]?\s*([A-Z0-9-]{4,24})/i)||undefined,
   provider:header(m,'from').replace(/<.*>/,'').replace(/"/g,'').trim()||undefined,
   price:pick(text,/(?:סה["״]?כ(?: לתשלום)?|total)\s*[:\-]?\s*(₪\s?[\d,.]+|[\d,.]+\s?₪|[$€£]\s?[\d,.]+)/i)||undefined,
-  files,links:ticketLinks(m),mailed,cancelled:/בוטל|cancel+ed|refund/i.test(subject)};}
+  files,links:ticketLinks(m),mailed,cancelled};}
 const SCHEMA={type:'OBJECT',properties:{
- isTicket:{type:'BOOLEAN',description:'true only for tickets/booking confirmations for an event the user will attend (concert, show, movie, sport, festival, stand-up, lecture). false for flights, hotels, shop orders, marketing, newsletters.'},
+ isTicket:{type:'BOOLEAN',description:'true for tickets/booking confirmations for an event (concert, show, movie, sport, festival, stand-up, lecture), and also for a mail cancelling or refunding such tickets or saying such an event was cancelled. false for flights, hotels, shop orders, marketing, newsletters.'},
  title:{type:'STRING',description:'Short event name as people say it, in the language used in the mail (Hebrew preferred): the film, show, artist or lecture title - not the cinema or venue name. No words like "אישור הזמנה" or order numbers.'},
  kind:{type:'STRING',enum:['concert','show','movie','lecture','sport','festival','standup','other'],description:'lecture = a talk, lecture, panel, workshop or conversation with a speaker - also when held at a cinema or cinematheque. movie = a film screening.'},
- start:{type:'STRING',description:'Event start in local time, YYYY-MM-DDTHH:mm (or YYYY-MM-DD if no time). Not the purchase date.'},
+ start:{type:'STRING',description:'Event start in local time, YYYY-MM-DDTHH:mm (or YYYY-MM-DD if no time). Not the purchase or cancellation date. Empty if the mail does not say.'},
  doors:{type:'STRING',description:'Doors/gates opening time HH:mm, if stated'},
  venue:{type:'STRING',description:'Venue or hall name'},address:{type:'STRING',description:'Street address of the venue, if stated'},city:{type:'STRING'},
  seats:{type:'ARRAY',items:{type:'STRING'},description:'One entry per seat in Hebrew, e.g. "אזור B, שורה 7, כיסא 12". A range like "כיסאות: 5 - 6" is two entries (כיסא 5, כיסא 6). Standing tickets: "עמידה".'},
  count:{type:'INTEGER',description:'Number of tickets in this order (e.g. "סה\"כ כרטיסים בהזמנה: 2")'},order:{type:'STRING',description:'Order/booking number'},
  provider:{type:'STRING',description:'Ticket seller or cinema chain'},price:{type:'STRING',description:'Total paid with currency sign'},
- cancelled:{type:'BOOLEAN',description:'true if this mail says the order or event was cancelled/refunded'}},required:['isTicket']};
+ cancelled:{type:'BOOLEAN',description:'true only if this mail itself says the tickets/order were cancelled or refunded, or the event was cancelled. false for a normal purchase, a reminder, or a mail that only explains the refund policy.'},
+ eventCancelled:{type:'BOOLEAN',description:'true if the whole event was cancelled by the organiser (not just this order)'}},required:['isTicket']};
 export type AiResult={ok:true;ticket:Ticket|null}|{ok:false};
 export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  if(!process.env.GEMINI_API_KEY)return {ok:false};
@@ -100,11 +104,13 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  const r=await gemini({systemInstruction:{parts:[{text:'You read emails for an Israeli user and extract event ticket details as JSON. Cinemas and cinematheques sell tickets to lectures and talks too: tell a lecture from a film screening. Be exact; leave fields out when the mail does not say them.'}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseSchema:SCHEMA,temperature:0}},20000);
  if(!r.ok)return {ok:false};
  let j:Record<string,any>;try{j=JSON.parse(r.text);}catch{return {ok:false};}
- if(!j.isTicket||!/^\d{4}-\d{2}-\d{2}/.test(String(j.start||'')))return {ok:true,ticket:null};
+ const cx=!!j.cancelled||!!j.eventCancelled;const dated=/^\d{4}-\d{2}-\d{2}/.test(String(j.start||''));
+ // A cancellation may leave out the date: it is kept only to be joined to the event it cancels (by order number or name).
+ if(!j.isTicket||(!dated&&!cx))return {ok:true,ticket:null};
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;
  return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,
-  start:String(j.start).slice(0,16),doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
-  order:s(j.order),provider:s(j.provider),price:s(j.price),files:ticketFiles(m).map(f=>({...f,msg:m.id})),links:ticketLinks(m),mailed,ai:true,cancelled:!!j.cancelled}};}
+  start:dated?String(j.start).slice(0,16):'',doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
+  order:j.eventCancelled?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:ticketLinks(m),mailed,ai:true,cancelled:cx}};}
 export type Read={ticket:Ticket|null;retry:boolean};
 // last: this mail already waited once for Gemini, so the rules' reading is used rather than waiting again.
 export async function readTicket(m:Message,last=false):Promise<Read>{

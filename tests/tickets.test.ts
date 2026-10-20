@@ -44,3 +44,19 @@ test('the same order read twice, and seats written three ways, count once',async
  const remind=withKey({...base,key:'',msgs:['m9'],order:'16320-39278-74340',seats:['שורה 1, כיסא 5','שורה 1, כיסא 6'],count:2,ai:true,mailed:5});
  const other=withKey({...base,key:'',msgs:['m2'],order:'20980-39279-55490',seats:['אזור: אולם, שורה: 1, כיסא: 2'],count:1,ai:true,mailed:2});
  const all=mergeAll([],[rule,ai,remind,other]);assert.equal(all.length,1);assert.equal(all[0].count,3);assert.deepEqual(all[0].seats,['אזור אולם, שורה 1, כיסא 5','אזור אולם, שורה 1, כיסא 6','אזור אולם, שורה 1, כיסא 2']);});
+test('cancellations: one order of three, a whole event, and a notice with no date',async()=>{const {mergeAll}=await import('@/lib/combine');
+ const base={thread:'t',title:'טארה סטרונג - מאסטרקלאס',kind:'lecture' as const,start:'2026-11-03T17:00',files:[],links:[],ai:true};
+ const a=withKey({...base,key:'',msgs:['m1'],order:'111-1',seats:['שורה 1, כיסא 5','שורה 1, כיסא 6'],count:2,price:'86 ₪',mailed:1});
+ const b=withKey({...base,key:'',msgs:['m2'],order:'222-2',seats:['שורה 1, כיסא 2'],count:1,price:'43 ₪',mailed:2});
+ // Order 222-2 refunded; the refund mail has no date.
+ const cx=withKey({...base,key:'',msgs:['m3'],title:'ביטול הזמנה',start:'',order:'222-2',seats:[],mailed:3,cancelled:true});
+ let all=mergeAll([],[a,b,cx]);assert.equal(all.length,1);assert.equal(all[0].cancelled,false);assert.equal(all[0].count,2);assert.match(all[0].price!,/86/);assert.equal(all[0].title,base.title);
+ // The organiser cancels the event (no order number): the event is cancelled, and stays where it was in time.
+ const ev=withKey({...base,key:'',msgs:['m4'],start:'',seats:[],mailed:4,cancelled:true});
+ all=mergeAll(all,[ev]);assert.equal(all.length,1);assert.equal(all[0].cancelled,true);assert.equal(all[0].start,base.start);
+ // A cancellation that matches nothing stays apart (and has no date, so the app does not list it).
+ const lone=withKey({...base,key:'',msgs:['m5'],title:'הופעה אחרת לגמרי',start:'',order:'999',seats:[],mailed:5,cancelled:true});
+ all=mergeAll(all,[lone]);assert.equal(all.length,2);
+ // A plain purchase of a past event is not cancelled.
+ const past=withKey({...base,key:'',msgs:['m6'],title:'שלמה ארצי',start:'2025-01-01T20:00',order:'777',seats:[],mailed:6});
+ assert.ok(!mergeAll([],[past])[0].cancelled);});

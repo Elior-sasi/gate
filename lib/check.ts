@@ -13,7 +13,9 @@ export async function check(u:Row,sql:Sql){let tickets=u.tickets||[];let sent=u.
   for(const id of fresh){const m=await gmail('messages/'+encodeURIComponent(id)+'?format=full') as Message;const r=await readTicket(m).catch(()=>({ticket:null,retry:true}));
    if(r.retry)continue;seen.add(id);if(!r.ticket)continue;
    const known=tickets.some(t=>t.key===r.ticket!.key||t.msgs.some(x=>r.ticket!.msgs.includes(x)));tickets=mergeTickets([...tickets,r.ticket]);
-   if(!known&&!r.ticket.cancelled&&!u.hidden?.includes(r.ticket.key))notes.push(newTicket(r.ticket));}
+   if(!known&&!r.ticket.cancelled&&!u.hidden?.includes(r.ticket.key))notes.push(newTicket(r.ticket));
+   // A cancellation mail for an event already on the list: say so (the whole event, or one of its orders).
+   if(r.ticket.cancelled){const ev=tickets.find(t=>t.msgs.includes(id));if(ev&&ev.start&&!u.hidden?.includes(ev.key))notes.push({key:ev.key,tag:'cx:'+ev.key+':'+id,title:(ev.cancelled?'בוטל: ':'הזמנה בוטלה: ')+ev.title,body:ev.cancelled?'האירוע הוסר מהקרובים ומהיומן':'שאר הכרטיסים לאירוע בתוקף',url:'/?t='+encodeURIComponent(ev.key)});}}
  }catch{gmailOk=false;}}
  notes.push(...reminders(tickets,sent,u.hidden||[]));
  let ok=0;const dead=new Set<string>();
