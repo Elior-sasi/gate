@@ -44,10 +44,12 @@ export function seatsIn(text:string){const out:string[]=[];const S='[\\s:\\-|,]*
 const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?(?:הזמנה|רכישה)|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
 export function cleanTitle(s:string){let t=s.replace(/\s*\((?:GO-OUT|Eventer|Tixwise|Smarticket|Eventim)\)\s*$/i,'').replace(/\s*\|\s*/g,' | ').replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
 export function kindOf(subject:string,text:string):Kind{const k=guessKind(subject);if(k!=='other')return k;const b=guessKind(text.slice(0,1500));return b==='lecture'?'other':b;}
+import {fixKind} from '@/lib/kind';
+export {fixKind};
 export function guessKind(t:string):Kind{
  // Cinematheques also host talks: a lecture is a lecture even when it is at a cinema.
  if(/הרצא|מרצה|lecture|talk\b|מאסטר.?קלאס|masterclass|כיתת אמן|שיחה עם|מפגש עם|רב.?שיח|סדנ|workshop|סמינר|כנס/i.test(t))return 'lecture';
- if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|סינמטק|פלאנט|planet/i.test(t))return 'movie';
+ if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|סינמטק|פלאנט|planet|מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית|רוסית|ערבית|צרפתית|יפנית)\)|dubbed|subtitled|\b3D\b/i.test(t))return 'movie';
  if(/סטנד.?אפ|stand.?up|קומי/i.test(t))return 'standup';
  if(/משחק|נגד|vs\.?|מכבי|הפועל|בית"ר|ליגה|יורוליג|כדורגל|כדורסל|match|game/i.test(t))return 'sport';
  if(/פסטיבל|festival/i.test(t))return 'festival';
@@ -109,7 +111,7 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
  const hour=start&&!start.includes('T')&&pick(text,/(?:בשעה|שעה|at)\s*[-:|]?\s*(\d{1,2}:\d{2})/i);
  if(!cancelled&&!fromSeller(m)&&!files.length&&!seatsIn(text).length&&!/כרטיס|ticket|הופעה|הצגה|הקרנה|מופע|כנס|הרצאה/i.test(subject))return null;
  const k=guessKind(title);const links=ticketLinks(m);const thanks=pick(text,/תודה על הזמנתך ב([^\n.]{3,40})/);
- return {key:'',msgs:[m.id],thread:m.threadId,title,kind:k!=='other'?k:kindOf(subject,text),start:hour?start+'T'+hour.padStart(5,'0'):start,
+ return {key:'',msgs:[m.id],thread:m.threadId,title,kind:fixKind(k!=='other'?k:kindOf(subject,text),sellerOf(m)),start:hour?start+'T'+hour.padStart(5,'0'):start,
   doors:pick(text,/(?:פתיחת (?:דלתות|שערים)|doors open)\s*[:\-|]?\s*(\d{1,2}:\d{2})/i)||undefined,
   venue:(pres>0?lines[pres-1].slice(1).trim():'')||field(text,'מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location')||(thanks?thanks+(row?' - '+row[4]:''):'')||undefined,
   address:field(text,'כתובת|address')||undefined,
@@ -144,7 +146,7 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  // A cancellation may leave out the date: it is kept only to be joined to the event it cancels (by order number or name).
  if(!j.isTicket||(!dated&&!cx&&!sig.restored))return {ok:true,ticket:null};
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;const links=ticketLinks(m);
- return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,
+ return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:fixKind((['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,sellerOf(m)),
   start:dated?String(j.start).slice(0,16):'',doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
   order:j.eventCancelled&&!j.order?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,...(sig.update?{update:true}:{}),...(sig.restored?{restored:true}:{}),
   cancel:cx?undefined:(()=>{const c=cancelInfo(text,links);const p=typeof j.cancelPolicy==='string'&&j.cancelPolicy.trim()?j.cancelPolicy.trim().slice(0,300):'';return p||c?{...c,text:c?.text||p}:undefined;})()}};}

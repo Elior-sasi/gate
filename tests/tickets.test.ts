@@ -68,3 +68,5 @@ test('cinematheque mail read by the rules: the event name, lecture, time, seats 
  assert.equal(a.title,'טארה סטרונג - מאסטרקלאס');assert.equal(a.kind,'lecture');assert.equal(a.start,'2026-11-03T17:00');assert.equal(a.seats.length,2);assert.equal(a.order,'16320-39278-74340');assert.equal(a.count,2);assert.equal(a.venue,'סינמטק ירושלים - סינמטק 2');});
 test('a table header "Row and Seat" is not a seat',()=>{assert.deepEqual(seatsIn('Date and time | Movie | Venue | Number of tickets | Row and Seat\n1/10/2026 14:45 | X | אולם 2 | 2 | Row: 6, Seats: 8 - 9\nתאריך ושעה | סרט | שורה וכסא'),['שורה 6, כיסא 8','שורה 6, כיסא 9']);
  assert.deepEqual(seatsIn('Row F Seat 4 | שורה 12א כיסא 3'),['שורה F, כיסא 4','שורה 12א, כיסא 3']);});
+test('a cartoon at the cinema is a film, not a match',async()=>{const {fixKind}=await import('@/lib/tickets');
+ assert.equal(guessKind('לוני טונס מציגים: קיוטי נגד אקמי-מדובב (עברית)'),'movie');assert.equal(fixKind('sport','cinema-city.co.il'),'movie');assert.equal(fixKind('lecture','jer-cin.co.il'),'lecture');assert.equal(fixKind('sport','leaan.co.il'),'sport');});
