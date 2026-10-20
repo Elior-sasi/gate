@@ -78,11 +78,12 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  const say=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),2200);};
  const scan=useCallback(async(fresh=false)=>{if(!user||running.current)return;running.current=true;setBusy(true);setErr('');
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
-   const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json();if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
+   const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json().catch(()=>({error:'הסריקה לא הושלמה. נסה שוב.'}));if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
    const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));let cur=base;setProg([0,todo.length]);
-   const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=6)o.push(l.slice(i,i+6));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
-   const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b,last:second})});const d=await res.json();
-     if(!res.ok){if(res.status===401||res.status===403)throw new Error(d.error);continue;}
+   const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=4)o.push(l.slice(i,i+4));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
+   const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b,last:second})});const d=await res.json().catch(()=>null);
+     // A batch that timed out (no JSON back) is read again in the second round instead of stopping the whole scan.
+     if(!res.ok||!d){if(d&&(res.status===401||res.status===403))throw new Error(d.error);if(!second)retryIds.push(...b);done+=b.length;if(!second)setProg([done,todo.length]);continue;}
      cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)setProg([done,todo.length]);}second=true;};
    await worker();
    // Mail Gemini could not read yet (busy) is tried again once after a short pause.
@@ -308,16 +309,21 @@ function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' 
 async function shareFile(f:TFile){try{const blob=await (await fetch(fileUrl(f))).blob();const file=new File([blob],f.name||'ticket.pdf',{type:blob.type||f.type});
  if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return;}const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),4000);}catch{}}
 // Full-screen ticket viewer with a close button: a home-screen app has no browser back button.
-// PDFs are drawn page by page (pdf.js from cdnjs), images are shown as they are.
-function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const [zoom,setZoom]=useState('');
+// PDFs are drawn page by page (pdf.js from this site), images are shown as they are.
+function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const [zoom,setZoom]=useState('');const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
  useEffect(()=>{if(img){setBusy(false);return;}let off=false;(async()=>{try{
-   const lib=await pdfLib();const data=await (await fetch(fileUrl(f))).arrayBuffer();
+   const res=await fetch(fileUrl(f),{cache:'no-store'});if(!res.ok)throw new Error(res.status===401||res.status===403?'auth':'file');
+   const data=await res.arrayBuffer();blob.current=new Blob([data],{type:'application/pdf'});const lib=await pdfLib().catch(()=>null);if(!lib)throw new Error('lib');
    // The worker sometimes fails to start on a phone's first try; one more try, then without a worker.
    const open=(opts:object)=>lib.getDocument({data:data.slice(0),...opts}).promise;let pdf:any;try{pdf=await open({});}catch{try{pdf=await open({});}catch{pdf=await open({disableWorker:true});}}
    for(let n=1;n<=Math.min(pdf.numPages,12)&&!off;n++){const page=await pdf.getPage(n);const w=(box.current?.clientWidth||360)*Math.min(3,devicePixelRatio||2);const vp=page.getViewport({scale:1});const v=page.getViewport({scale:w/vp.width});
     const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';c.onclick=()=>setZoom(c.toDataURL('image/png'));await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
-  }catch{setErr('לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
+  }catch(e){const why=e instanceof Error?e.message:'';
+   // pdf.js could not draw it: Safari's own PDF view inside the app still shows the ticket.
+   if(blob.current&&!off){setFrame(URL.createObjectURL(blob.current));return;}
+   setErr(why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
+ useEffect(()=>()=>{if(frame)URL.revokeObjectURL(frame);},[frame]);
  return <div className="viewer" role="dialog" aria-label="הכרטיס">{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
   <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><button className="ib" aria-label="שמירה או שיתוף" onClick={()=>void shareFile(f)}><Share2/></button></div>
-  <div className="viewerBody" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>setZoom(fileUrl(f))}/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>
+  <div className="viewerBody" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>setZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>
  </div>;}

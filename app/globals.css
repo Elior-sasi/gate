@@ -348,6 +348,7 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .viewerTop{display:flex;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top)) 16px 10px}
 .viewerBody{flex:1;overflow:auto;padding:0 12px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:12px;-webkit-overflow-scrolling:touch}
 .viewerBody .pdfPage,.viewerBody img{width:100%;max-width:640px;height:auto;border-radius:12px;background:#fff}
+.viewerBody .pdfFrame{width:100%;max-width:640px;flex:1;min-height:70vh;border:0;border-radius:12px;background:#fff}
 .kindRow{display:grid;grid-template-columns:minmax(90px,auto) 1fr 28px;align-items:center;gap:10px;padding:7px 0}.kindRow span{display:flex;align-items:center;gap:6px}.kindRow i{display:block;height:10px;border-radius:10px;background:linear-gradient(90deg,#ffb547,#ffd27a)}.kindRow b{text-align:left}
 .statGrid{margin-top:14px}.moneyBig b{color:#ffd79a}
 .micBtn.ask{color:#ffd79a}.askHints button{border-color:#a77a2c;background:#1a150c;color:#ffe6b8}.askMsg.user{background:#3a2a10}
