@@ -223,7 +223,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    {tab===0&&<label className="search"><Search size={20}/><input aria-label="חיפוש אירועים" placeholder="חיפוש אירוע" value={q} onChange={e=>{setQ(e.target.value);setHeard('');}}/><button type="button" className="micBtn askBtn" aria-label="שאל את Unstage" onClick={()=>setAskOpen(true)}><Sparkles size={20}/></button>{canListen&&<button type="button" className={'micBtn'+(listening?' on':'')} aria-label={listening?'מקשיב, דבר עכשיו':'חיפוש בקול: שאל מתי אירוע'} onClick={()=>listen(voiceSearch)}><Mic size={20}/></button>}</label>}
    {tab===0&&heard&&<p className="voiceAnswer" role="status" aria-live="assertive">{heard}</p>}
    {(()=>{const rows=tab===1?week:list;const showHero=tab===0&&filt==='next'&&hero&&!q;const rest=showHero?rows.filter(t=>t.key!==hero.key):rows;
-    return <>{showHero&&<Hero t={hero} press={longPress(hero)}/>}
+    return <>{showHero&&<Hero t={hero} press={longPress(hero)} onShow={fs=>setMenuView(fs)}/>}
      {showHero&&rest.length>0&&<h3 className="listH">בהמשך</h3>}
      <div className="list">{rest.map((t,i)=><Card key={t.key} t={t} i={i} press={longPress(t)}/>)}</div>
      {!rest.length&&!showHero&&<section className="panel empty">{tab===1?<CalendarDays size={40}/>:filt==='past'?<History size={40}/>:<TicketIcon size={40}/>}<h2>{q?'לא נמצאו אירועים':tab===1?'אין אירועים השבוע':filt==='past'?'עוד אין אירועים שהיו':filt==='cx'?'אין אירועים שבוטלו':'אין אירועים קרובים'}</h2><p>{q?'נסה מילה אחרת.':'כרטיסים חדשים יופיעו כאן לבד.'}</p></section>}</>;})()}</>}
@@ -253,7 +253,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  </main>;}
 // Hero card like Unbox's: a ring that fills up from the purchase to the event, the date tile, and the event's details.
 function DateTile({t}:{t:Ticket}){const d=when(t);const n=daysTo(t);return <div className={'date'+(n===0?' today':'')} aria-hidden="true"><small>{n===0?'היום':DAY_SHORT[d.getDay()]}</small><b>{d.getDate()}</b><span>{MON_SHORT[d.getMonth()]}{d.getFullYear()!==new Date().getFullYear()?' '+String(d.getFullYear()).slice(2):''}</span></div>;}
-function Hero({t,press}:{t:Ticket;press:Press}){const [big,unit]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
+function Hero({t,press,onShow}:{t:Ticket;press:Press;onShow:(fs:TFile[])=>void}){useEffect(()=>{const pdfs=t.files.filter(f=>/pdf/i.test(f.type+f.name));if(pdfs.length){void pdfLib().catch(()=>{});pdfs.slice(0,4).forEach(f=>void bytes(fileUrl(f)).catch(()=>{}));}},[t]);const [big,unit]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
  const at=when(t).getTime();const T=Math.max(.06,Math.min(1,(Date.now()-t.mailed)/Math.max(1,at-t.mailed)));
  return <button className="nextCard nc-ring" {...press} aria-label={'האירוע הבא: '+t.title+', '+big+' '+unit}>
   <div className="nc-k nc-top">האירוע הבא · {K.label}</div>
@@ -263,7 +263,8 @@ function Hero({t,press}:{t:Ticket;press:Press}){const [big,unit]=countdown(t);co
    <div className="nc-info"/><DateTile t={t}/></div>
   <div className="nc-nm nc-full">{bidi(t.title)}</div>
   <div className="nc-chips" aria-hidden="true">{timed(t)&&<span>{time(t)}</span>}{place(t)&&<span>{bidi(place(t))}</span>}{t.seats.length>0&&<span>{t.seats.length===1?t.seats[0]:t.seats.length+' מקומות'}</span>}</div>
-  {t.files.length>0&&!t.cancelled&&<div className="nc-go"><QrCode size={20}/>{showLabel(t)}</div>}
+  {/* "הצג כרטיס" opens the tickets themselves, all of them, straight away (the rest of the card opens the event). */}
+  {t.files.length>0&&!t.cancelled&&<div className="nc-go" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();onShow(t.files.filter(f=>!/pkpass/i.test(f.type+f.name)));}} onTouchStart={e=>e.stopPropagation()}><QrCode size={20}/>{showLabel(t)}</div>}
  </button>;}
 // Cancelling: the terms as the mail states them (or the seller's, or the law's), the deadline, and a way to do it.
 function CancelBox({t}:{t:Ticket}){const s=sellerCancel(t);const text=t.cancel?.text||s?.note||LAW.note;const url=t.cancel?.url||s?.url||(!t.cancel?.text&&!s?LAW.url:undefined);
@@ -389,6 +390,9 @@ function Summary({list}:{list:Ticket[]}){const slide=useRowSlide();const y=new D
   {!inYear.length&&<div className="panel"><ChartColumn size={40}/><h2>עוד אין נתונים</h2><p>אחרי שיהיו כרטיסים, יופיע כאן סיכום.</p></div>}</div></>;}
 
 // pdf.js is served from this site (public/pdfjs, the legacy build for older Safari) and loaded ahead when an event opens.
+// Ticket files fetched once per session, and ahead of time for the next event, so "הצג כרטיס" opens at once.
+const BYTES=new Map<string,Promise<ArrayBuffer>>();
+function bytes(u:string){let p=BYTES.get(u);if(!p){p=fetch(u,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(r.status===401||r.status===403?'auth':'file');return r.arrayBuffer();});p.catch(()=>BYTES.delete(u));BYTES.set(u,p);}return p;}
 let pdfjs:Promise<any>|null=null;
 function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' as string).then((lib:any)=>{lib.GlobalWorkerOptions.workerSrc='/pdfjs/pdf.worker.min.mjs';return lib;}).catch(e=>{pdfjs=null;throw e;});return pdfjs;}
 // Save or send the ticket file through the phone's share sheet (a link would leave the home-screen app with no way back).
@@ -398,8 +402,7 @@ async function shareFiles(fs:TFile[]){try{const files=await Promise.all(fs.map(a
 // One ticket file inside the viewer: PDFs drawn page by page (pdf.js from this site), images as they are.
 function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boolean}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const page=/html/.test(f.type);const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
  useEffect(()=>{if(img||page){setBusy(false);return;}let off=false;(async()=>{try{
-   const res=await fetch(fileUrl(f),{cache:'no-store'});if(!res.ok)throw new Error(res.status===401||res.status===403?'auth':'file');
-   const data=await res.arrayBuffer();blob.current=new Blob([data],{type:'application/pdf'});const lib=await pdfLib().catch(()=>null);if(!lib)throw new Error('lib');
+   const data=await bytes(fileUrl(f));blob.current=new Blob([data],{type:'application/pdf'});const lib=await pdfLib().catch(()=>null);if(!lib)throw new Error('lib');
    // The worker sometimes fails to start on a phone's first try; one more try, then without a worker.
    const open=(opts:object)=>lib.getDocument({data:data.slice(0),...opts}).promise;let pdf:any;try{pdf=await open({});}catch{try{pdf=await open({});}catch{pdf=await open({disableWorker:true});}}
    for(let n=1;n<=Math.min(pdf.numPages,12)&&!off;n++){const page=await pdf.getPage(n);const w=(box.current?.clientWidth||360)*Math.min(3,devicePixelRatio||2);const vp=page.getViewport({scale:1});const v=page.getViewport({scale:w/vp.width});
