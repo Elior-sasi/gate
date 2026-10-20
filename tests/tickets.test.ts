@@ -60,3 +60,7 @@ test('cancellations: one order of three, a whole event, and a notice with no dat
  // A plain purchase of a past event is not cancelled.
  const past=withKey({...base,key:'',msgs:['m6'],title:'שלמה ארצי',start:'2025-01-01T20:00',order:'777',seats:[],mailed:6});
  assert.ok(!mergeAll([],[past])[0].cancelled);});
+test('cinematheque mail read by the rules: the event name, lecture, time, seats once, order number',()=>{
+ const body=(order:string,line:string,n:number,eng:string)=>`| # אישור הזמנה |\n\n| |\n| # ${order} |\n\n| שלום אליאור, |\n| פרטי הרכישה: |\n| לחצו כאן לקבלת הכרטיסים |\n\n| |\n| טארה סטרונג - מאסטרקלאס |\n\n| |\n| בסינמטק ירושלים - סינמטק 2 |\n\n| |\n| ביום - שלישי 3/11/2026 |\n\n| |\n| בשעה - 17:00 |\n\n| ${line} |\n| סה"כ כרטיסים בהזמנה: ${n} |\n| סה"כ תשלום בהזמנה: ${43*n}.00 ₪ |\n| # Booking Confirmation |\n| # ${order} |\n| ${eng} |`;
+ const a=ruleTicket(mail('סינמטק ירושלים - אישור הזמנה',body('16320-39278-74340','(43.00 ₪) רגיל x 2 אזור: אולם, שורה: 1, כיסאות: 5 - 6',2,'Row: 1, Seats: 5 - 6'),'סינמטק <service@jer-cin.co.il>') as never,body('16320-39278-74340','(43.00 ₪) רגיל x 2 אזור: אולם, שורה: 1, כיסאות: 5 - 6',2,'Row: 1, Seats: 5 - 6'))!;
+ assert.equal(a.title,'טארה סטרונג - מאסטרקלאס');assert.equal(a.kind,'lecture');assert.equal(a.start,'2026-11-03T17:00');assert.equal(a.seats.length,2);assert.equal(a.order,'16320-39278-74340');assert.equal(a.count,2);assert.equal(a.venue,'סינמטק ירושלים - סינמטק 2');});

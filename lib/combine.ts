@@ -26,7 +26,7 @@ function byOrder(parts:Record<string,Part>){const out:Record<string,Part>={};con
 export function status(all:Record<string,Part>){const list=Object.values(byOrder(all));const whole=list.some(p=>p.cancelled&&!p.order);const live=whole?[]:list.filter(p=>!p.cancelled);
  return {cancelled:!live.length&&list.some(p=>p.cancelled),live,some:!whole&&live.length>0&&list.some(p=>p.cancelled&&p.order)};}
 export function totals(all:Record<string,Part>){const st=status(all);const parts=st.live.length?Object.fromEntries(Object.entries(byOrder(all)).filter(([,p])=>st.live.includes(p))):byOrder(all);const list=Object.values(parts).filter(p=>p.seats?.length||p.count||p.price||!p.cancelled);const seats=cleanSeats(list.flatMap(p=>p.seats||[])).slice(0,20);
- const count=list.reduce((a,p)=>a+(p.count||p.seats?.length||1),0);const sum=list.reduce((a,p)=>a+money(p.price),0);const cur=list.map(p=>p.price||'').find(x=>/[₪$€£]/.test(x))?.match(/[₪$€£]/)?.[0]||'₪';
+ const count=list.reduce((a,p)=>a+(p.count||cleanSeats(p.seats||[]).length||1),0);const sum=list.reduce((a,p)=>a+money(p.price),0);const cur=list.map(p=>p.price||'').find(x=>/[₪$€£]/.test(x))?.match(/[₪$€£]/)?.[0]||'₪';
  const orders=list.map(p=>p.order).filter(Boolean) as string[];
  return {seats,count,price:sum?cur+' '+(Math.round(sum*100)/100).toLocaleString('en-US'):undefined,orders};}
 export function combine(o:Ticket,t:Ticket):Ticket{

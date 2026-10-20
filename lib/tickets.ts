@@ -1,7 +1,7 @@
 // Turns a ticket email into an event: what, when, where, which seats, and the ticket files to show at the gate.
 // Gemini reads the mail when a key is set (stores word things very differently); the rules below are the fallback and the guard.
 import {gemini} from '@/lib/gemini';
-import {mergeAll} from '@/lib/combine';
+import {mergeAll,cleanSeats} from '@/lib/combine';
 import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
 export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'other';
 export type TFile={msg:string;id:string;name:string;type:string;size:number};
@@ -42,7 +42,7 @@ export function cleanTitle(s:string){let t=s.replace(/\s*[-|–]\s*(?:אישור
 export function kindOf(subject:string,text:string):Kind{const k=guessKind(subject);if(k!=='other')return k;const b=guessKind(text.slice(0,1500));return b==='lecture'?'other':b;}
 export function guessKind(t:string):Kind{
  // Cinematheques also host talks: a lecture is a lecture even when it is at a cinema.
- if(/הרצא|מרצה|lecture|talk\b|שיחה עם|מפגש עם|רב.?שיח|סדנ|workshop|סמינר|כנס/i.test(t))return 'lecture';
+ if(/הרצא|מרצה|lecture|talk\b|מאסטר.?קלאס|masterclass|כיתת אמן|שיחה עם|מפגש עם|רב.?שיח|סדנ|workshop|סמינר|כנס/i.test(t))return 'lecture';
  if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|סינמטק|פלאנט|planet/i.test(t))return 'movie';
  if(/סטנד.?אפ|stand.?up|קומי/i.test(t))return 'standup';
  if(/משחק|נגד|vs\.?|מכבי|הפועל|בית"ר|ליגה|יורוליג|כדורגל|כדורסל|match|game/i.test(t))return 'sport';
@@ -73,14 +73,21 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
  const subject=header(m,'subject');const mailed=+(m.internalDate||Date.now());const all=subject+'\n'+text;
  if(!TICKETISH.test(all)||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
  const cancelled=CANCEL.test(subject);const start=eventStart(text,mailed)||eventStart(subject,mailed)||'';if(!start&&!cancelled)return null;
- const title=cleanTitle(subject);const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
+ const lines=text.split('\n').map(l=>l.replace(/[|#*]/g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+ // Many sellers title the mail with the venue ("סינמטק ירושלים - אישור הזמנה") and write the event as a line followed by "ב<venue>".
+ const at=lines.findIndex(l=>/^ב(?:סינמטק|סינמה|קולנוע|תיאטרון|היכל|אולם|מוזיאון|בית|זאפה|בארבי|מועדון|מרכז|גני|פארק|אמפי|האנגר|רידינג)/.test(l));
+ const named=at>0&&lines[at-1].length<=80&&!/[:]|הזמנה|כרטיס/.test(lines[at-1])?lines[at-1]:'';
+ const title=named||cleanTitle(subject);const files=ticketFiles(m).map(f=>({...f,msg:m.id}));
+ const hour=start&&!start.includes('T')&&pick(text,/בשעה\s*[-:]?\s*(\d{1,2}:\d{2})/);
  if(!fromSeller(m)&&!files.length&&!seatsIn(text).length&&!/כרטיס|ticket|הופעה|הצגה|הקרנה|מופע|כנס|הרצאה/i.test(subject))return null;
- return {key:'',msgs:[m.id],thread:m.threadId,title,kind:kindOf(subject,text),start,
+ const k=guessKind(title);
+ return {key:'',msgs:[m.id],thread:m.threadId,title,kind:k!=='other'?k:kindOf(subject,text),start:hour?start+'T'+hour.padStart(5,'0'):start,
   doors:pick(text,/(?:פתיחת (?:דלתות|שערים)|doors open)\s*[:\-]?\s*(\d{1,2}:\d{2})/i)||undefined,
-  venue:pick(text,/(?:^|\n)\s*(?:מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location)\s*[:\-]\s*([^\n]{3,80})/i)||undefined,
+  venue:pick(text,/(?:^|\n)\s*(?:מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location)\s*[:\-]\s*([^\n]{3,80})/i)||(named?lines[at].slice(1):undefined),
   address:pick(text,/(?:^|\n)\s*(?:כתובת|address)\s*[:\-]\s*([^\n]{4,80})/i)||undefined,
-  seats:seatsIn(text),count:Number(pick(text,/(?:מספר כרטיסים|כמות(?: כרטיסים)?|quantity|tickets?)\s*[:\-x×]\s*(\d{1,2})\b/i))||undefined,
-  order:pick(text,/(?:מס['׳]?\s*(?:ה)?הזמנה|מספר (?:ה)?הזמנה|order\s*(?:no\.?|number|#)|booking\s*(?:ref(?:erence)?|no\.?|#))\s*[:#\-]?\s*([A-Z0-9-]{4,24})/i)||undefined,
+  // The same seat is often written twice (Hebrew and English parts of one mail).
+  seats:cleanSeats(seatsIn(text)),count:Number(pick(text,/(?:מספר כרטיסים|סה["״]?כ כרטיסים(?: בהזמנה)?|כמות(?: כרטיסים)?|quantity|tickets?)\s*[:\-x×]\s*(\d{1,2})\b/i))||undefined,
+  order:pick(text,/(?:מס['׳]?\s*(?:ה)?הזמנה|מספר (?:ה)?הזמנה|order\s*(?:no\.?|number|#)|booking\s*(?:ref(?:erence)?|no\.?|#))\s*[:#\-]?\s*([A-Z0-9-]{4,24})/i)||pick(text,/(?:אישור הזמנה|booking confirmation)[\s|#]*(\d[\d-]{5,24})/i)||undefined,
   provider:header(m,'from').replace(/<.*>/,'').replace(/"/g,'').trim()||undefined,
   price:pick(text,/(?:סה["״]?כ(?: לתשלום)?|total)\s*[:\-]?\s*(₪\s?[\d,.]+|[\d,.]+\s?₪|[$€£]\s?[\d,.]+)/i)||undefined,
   files,links:ticketLinks(m),mailed,cancelled};}
