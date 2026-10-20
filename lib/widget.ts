@@ -25,7 +25,7 @@ const fam2=config.widgetFamily||'small'
 const w=new ListWidget();w.url=(r&&r.url)||'https://gatetickets.vercel.app';w.setPadding(8,14,10,14)
 // Unstage colours: warm amber fading into near-black.
 const g=new LinearGradient();g.colors=[new Color('#3b2a12'),new Color('#21180c'),new Color('#0f0c08')];g.locations=[0,0.55,1];g.startPoint=new Point(0,0);g.endPoint=new Point(1,1);w.backgroundGradient=g
-const img=await new Request('https://gatetickets.vercel.app/wordmark.png').loadImage().catch(()=>null)
+const img=await new Request('https://gatetickets.vercel.app/wordmark.png?v=2').loadImage().catch(()=>null)
 if(img){const i=w.addImage(img);i.imageSize=new Size(img.size.width*22/img.size.height,22);i.rightAlignImage()}else{const t=w.addText('Unstage');t.font=Font.boldSystemFont(16);t.textColor=new Color('#ffd27a')}
 w.addSpacer(8)
 const F={big:22,mid:17,small:13},C={white:'#ffffff',gold:'#ffb547',light:'#ffd79a',gray:'#a89c8a'}
