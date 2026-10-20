@@ -44,6 +44,8 @@ const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'
 // Latin runs (with their dashes, commas and colons) are kept together left-to-right inside Hebrew text: "CHAINSAW MAN – THE MOVIE" stays in one piece.
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
 const NAM=(u:string)=>'gate:names:'+u;
+// Events the user marked cancelled by hand (some sellers send no cancellation mail, e.g. a cancel by SMS or at the box office).
+const MCX=(u:string)=>'gate:mycx:'+u;
 const KEY=(u:string)=>'gate:v11:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
@@ -85,10 +87,10 @@ const Logo=()=><Mark/>;
 function GoogleButton({label,disabled}:{label:string;disabled?:boolean}){return <button className="gbtn" disabled={disabled}><svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg><span>{label}</span></button>;}
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
- const [tab,setTab]=useState(0);const [filt,setFilt]=useState<'next'|'past'|'cx'>('next');const [menu,setMenu]=useState<Ticket|null>(null);const [menuView,setMenuView]=useState<TFile[]|null>(null);const press=useRef<{t?:ReturnType<typeof setTimeout>;fired:boolean}>({fired:false});const slide=useRowSlide();const [names,setNames]=useState<Record<string,string>>({});const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
+ const [tab,setTab]=useState(0);const [filt,setFilt]=useState<'next'|'past'|'cx'>('next');const [menu,setMenu]=useState<Ticket|null>(null);const [menuView,setMenuView]=useState<TFile[]|null>(null);const press=useRef<{t?:ReturnType<typeof setTimeout>;fired:boolean}>({fired:false});const slide=useRowSlide();const [names,setNames]=useState<Record<string,string>>({});const [mycx,setMycx]=useState<string[]>([]);const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);const [prog,setProg]=useState<{pct:number;label:string}|null>(null);const [err,setErr]=useState('');const [toast,setToast]=useState('');
  const running=useRef(false);
- useEffect(()=>{if(!user)return;if(user.id==='demo'){import('@/lib/demo').then(d=>{setStore(d.demo());setReady(true);});return;}setStore(load(KEY(user.id),{tickets:[],read:[],updated:''}));setHidden(load(HID(user.id),[]));setNames(load(NAM(user.id),{}));setSize(load('unstage:size',0));setReady(true);},[user]);
+ useEffect(()=>{if(!user)return;if(user.id==='demo'){import('@/lib/demo').then(d=>{setStore(d.demo());setReady(true);});return;}setStore(load(KEY(user.id),{tickets:[],read:[],updated:''}));setHidden(load(HID(user.id),[]));setMycx(load(MCX(user.id),[]));setNames(load(NAM(user.id),{}));setSize(load('unstage:size',0));setReady(true);},[user]);
  const say=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),2200);};
  const scan=useCallback(async(fresh=false)=>{if(!user||running.current)return;running.current=true;setBusy(true);setErr('');setProg({pct:3,label:'מתחבר ל־Gmail…'});
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
@@ -141,7 +143,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||(navigator as {standalone?:boolean}).standalone===true;
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){setPush(ios&&!standalone?'install':'unsupported');return;}
   try{const reg=await navigator.serviceWorker.register('/sw.js');if(Notification.permission==='denied'){setPush('denied');return;}const sub=await reg.pushManager.getSubscription();setPush(sub&&Notification.permission==='granted'?'on':'off');}catch{setPush('unsupported');}})();},[user]);
- const sendServer=useCallback(async(extra:Record<string,unknown>={})=>{if(!user)return null;const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickets:(()=>{const nm=load(NAM(user.id),{} as Record<string,string>);return load(KEY(user.id),{tickets:[] as Ticket[]}).tickets.map(t=>nm[t.key]?{...t,title:nm[t.key]}:t);})(),hidden:load(HID(user.id),[] as string[]),...extra})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'השמירה נכשלה');return d;},[user]);
+ const sendServer=useCallback(async(extra:Record<string,unknown>={})=>{if(!user)return null;const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickets:(()=>{const nm=load(NAM(user.id),{} as Record<string,string>);const mc=load(MCX(user.id),[] as string[]);return load(KEY(user.id),{tickets:[] as Ticket[]}).tickets.map(t=>({...t,...(nm[t.key]?{title:nm[t.key]}:{}),...(mc.includes(t.key)?{cancelled:true}:{})}));})(),hidden:load(HID(user.id),[] as string[]),...extra})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'השמירה נכשלה');return d;},[user]);
  // After every scan, the server copy follows the phone.
  const synced=useRef('');useEffect(()=>{if(!srv?.enabled||!store.tickets.length)return;const sig=store.tickets.length+'|'+store.tickets.filter(t=>t.ai).length+'|'+hidden.length+'|'+JSON.stringify(names).length+'|'+(busy?'':store.updated);if(synced.current===sig)return;const id=setTimeout(()=>{synced.current=sig;sendServer().catch(()=>{});},busy?6000:500);return()=>clearTimeout(id);},[srv,busy,store,hidden.length,names,sendServer]);
  async function enablePush(){setPushMsg('');const perm=await Notification.requestPermission();if(perm!=='granted'){setPush(perm==='denied'?'denied':'off');return;}setPush('busy');
@@ -192,7 +194,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    setChat(c=>[...c,{role:'model',text:d.answer||(d.error==='busy'?'אני עמוס כרגע, נסה שוב בעוד דקה.':'לא הצלחתי לענות כרגע.')}]);}catch{setChat(c=>[...c,{role:'model',text:'לא הצלחתי לענות כרגע.'}]);}finally{setAsking(false);}}
  const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Unstage</div></div>;
  // Replaced tickets (a newer one came for the same order) are never shown.
- const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t),seats:cleanSeats(t.seats),...(names[t.key]?{title:names[t.key]}:{})})),[store.tickets,names]);
+ const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t),seats:cleanSeats(t.seats),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{})})),[store.tickets,names,mycx]);
  const visible=useMemo(()=>{const s=q.trim().toLowerCase();return named.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[named,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)&&!t.cancelled).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
  const past=useMemo(()=>visible.filter(t=>!upcoming(t)&&!t.cancelled).sort((a,b)=>when(b).getTime()-when(a).getTime()),[visible]);
@@ -216,6 +218,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  useEffect(()=>{const back=()=>setOpen(null);if(open){history.pushState({sheet:1},'');addEventListener('popstate',back);return ()=>removeEventListener('popstate',back);}},[open]);
  const close=()=>{if(history.state?.sheet)history.back();else setOpen(null);};
  const rename=(k:string)=>{if(!user)return;const cur=names[k]||store.tickets.find(t=>t.key===k)?.title||'';const v=prompt('שם לאירוע',cur);if(v===null)return;const n={...names};if(v.trim()&&v.trim()!==store.tickets.find(t=>t.key===k)?.title)n[k]=v.trim().slice(0,120);else delete n[k];setNames(n);save(NAM(user.id),n);say('השם עודכן');};
+ const markCx=(k:string)=>{if(!user)return;const on=!mycx.includes(k);const n=on?[...mycx,k]:mycx.filter(x=>x!==k);setMycx(n);save(MCX(user.id),n);say(on?'סומן כבוטל':'הסימון הוסר');void sendServer().catch(()=>{});};
  const hide=(k:string)=>{if(!user)return;const h=[...hidden,k];setHidden(h);save(HID(user.id),h);close();say('האירוע הוסתר');};
  // Long press on an event (as in Unbox): a short menu with what is needed at the door.
  const longPress=(t:Ticket)=>({onTouchStart:()=>{press.current.fired=false;press.current.t=setTimeout(()=>{press.current.fired=true;try{navigator.vibrate?.(15);}catch{}setMenu(t);},480);},
@@ -249,7 +252,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   </>}
   {tab===2&&<Summary list={visible}/>}
   {tab===3&&<SettingsView size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
-  {sel&&<Sheet t={sel} saved={saved.has(sel.key)} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
+  {sel&&<Sheet t={sel} saved={saved.has(sel.key)} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onMarkCx={()=>markCx(sel.key)} onCopy={()=>say('הועתק')}/>}
   {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
    <div className="askHead"><h3><Sparkles size={19}/>שאל את Unstage</h3><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
    <div className="askList" aria-live="polite">{!chat.length&&<div className="askHints">{['מה האירוע הבא שלי?','כמה הוצאתי על כרטיסים השנה?','באיזה שורה אני יושב בהופעה הבאה?','מה יש לי החודש?'].map(h=><button key={h} onClick={()=>ask(h)}>{h}</button>)}</div>}
@@ -323,7 +326,7 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
-function Sheet({t,saved,me,onClose,onRename,onHide,onCopy}:{t:Ticket;saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy}:{t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
@@ -351,6 +354,7 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onCopy}:{t:Ticket;saved:boole
    {upcoming(t)&&!t.cancelled&&(t.files.length>0||t.links.length>0)&&<button className="ghost" onClick={()=>setGift(true)}><Send size={19}/>שלח כרטיס למישהו</button>}
    {upcoming(t)&&!t.cancelled&&<button className="primary" onClick={()=>addToCalendar(t)}><CalendarPlus size={20}/>הוספה ליומן עם תזכורת</button>}
    <a className="ghost" href={'https://mail.google.com/mail/u/0/#all/'+t.thread} target="_blank" rel="noopener"><Mail size={19}/>פתיחת המייל</a></div>
+  {(!t.cancelled||t.mine)&&<button className="textBtn" onClick={onMarkCx}><RotateCcw size={16} style={{verticalAlign:-3,marginLeft:6}}/>{t.mine?'לא ביטלתי - הסר את הסימון':'ביטלתי את ההזמנה - סמן כבוטל'}</button>}
   <button className="textBtn" onClick={onHide}><EyeOff size={16} style={{verticalAlign:-3,marginLeft:6}}/>זה לא כרטיס - הסתר</button>
  </div>;}
 // Scriptable widget source with the personal link inside; the drawing code itself comes from Unstage, so updates arrive by themselves.
