@@ -3,7 +3,7 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
 import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
-import {mergeAll,status} from '@/lib/combine';
+import {mergeAll,status,cleanSeats} from '@/lib/combine';
 import {sellerCancel,contacts,LAW} from '@/lib/sellers';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
@@ -31,7 +31,12 @@ const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:/image/.test(f.ty
 // How many tickets the event has (one PDF may hold several), so the buttons say כרטיס or כרטיסים.
 const nTickets=(t:Ticket)=>Math.max(t.count||0,t.seats.length,t.files.filter(f=>!/pkpass/i.test(f.type+f.name)).length,1);
 const showLabel=(t:Ticket)=>nTickets(t)>1?'הצג '+nTickets(t)+' כרטיסים':'הצג כרטיס';
-const fileLabel=(f:TFile,i:number,n:number)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):'כרטיס'+(n>1?' '+(i+1):'');
+// What one ticket file holds: the tickets of the order it came with (its mail), so a PDF with two tickets says "2 כרטיסים".
+function inFile(t:Ticket,f:TFile){const docs=t.files.filter(g=>!/pkpass|image/i.test(g.type+g.name));if(docs.length===1&&docs[0]===f)return {n:nTickets(t),seats:t.seats};
+ const p=t.parts?.['m:'+f.msg];const same=docs.filter(g=>g.msg===f.msg).length;if(!p||same!==1)return {n:1,seats:[] as string[]};const seats=cleanSeats(p.seats||[]);return {n:Math.max(p.count||0,seats.length,1),seats};}
+const seatShort=(s:string[])=>{if(!s.length)return '';const m=s.map(x=>x.match(/שורה (\S+), כיסא (\d+)/)).filter(Boolean) as RegExpMatchArray[];
+ if(m.length===s.length&&m.every(x=>x[1]===m[0][1]))return 'שורה '+m[0][1]+', '+(m.length>1?'כיסאות '+m.map(x=>x[2]).join(', '):'כיסא '+m[0][2]);return s.join(' · ');};
+const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):k>1?k+' כרטיסים':'כרטיס'+(n>1&&k<1?' '+(i+1):'');
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":-]*[A-Za-z0-9)]/g,m=>'⁦'+m+'⁩');
 const NAM=(u:string)=>'gate:names:'+u;
 const KEY=(u:string)=>'gate:v10:'+u;const HID=(u:string)=>'gate:hidden:'+u;
@@ -250,7 +255,7 @@ function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onR
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
    <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd"><b>{n}</b><span>{u}</span></div>}</div>
   {!t.cancelled&&t.parts&&status(t.parts).some&&<p className="setNote" style={{color:'var(--bad)',textAlign:'center'}}>חלק מההזמנות בוטלו. הכרטיסים והמחיר כאן הם רק של מה שבתוקף.</p>}
-  {t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:<button key={f.msg+f.id} className="file" onClick={()=>setView(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span><small>{f.name.length<28?f.name:''}</small></button>;})}</div></div>}
+  {t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}</div></div>}
   {t.files.length===0&&t.links.length>0&&<div className="box"><h3><TicketIcon/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.links.map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>{l.label}</span></a>)}</div></div>}
   {w&&<div className="box"><h3><MapPin/>מקום</h3>{t.venue&&<p className="place">{bidi(t.venue)}</p>}{(t.address||t.city)&&<p className="addr">{bidi([t.address,t.city].filter(Boolean).join(', '))}</p>}
    <div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(w)+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(w)} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
