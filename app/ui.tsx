@@ -1,10 +1,11 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
-import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
+import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,Bus,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
 import {mergeAll,status,cleanSeats} from '@/lib/combine';
 import {sellerCancel,contacts,LAW} from '@/lib/sellers';
+import {navQuery,navLinks} from '@/lib/place';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
 const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},other:{label:'אירוע',Icon:TicketIcon}};
@@ -25,7 +26,9 @@ function countdown(t:Ticket):[string,string]{const n=daysTo(t);
  if(n===1)return ['מחר',timed(t)?'ב-'+time(t):''];
  return [String(n),'ימים'];}
 const place=(t:Ticket)=>[t.venue,t.city].filter(Boolean).join(', ');
-const where=(t:Ticket)=>[t.venue,t.address,t.city].filter(Boolean).join(', ');
+const where=(t:Ticket)=>navQuery(t);
+// As in Unbox: Google Maps, Moovit, Waze.
+function NavLinks({q}:{q:string}){const l=navLinks(q);return <div className="navLinks"><a className="ghost" href={l.google} target="_blank" rel="noopener noreferrer"><MapIcon size={18}/>Google Maps</a><a className="ghost" href={l.moovit} target="_blank" rel="noopener noreferrer"><Bus size={18}/>Moovit</a><a className="ghost" href={l.waze} target="_blank" rel="noopener noreferrer"><Navigation size={18}/>Waze</a></div>;}
 const fileUrl=(f:TFile)=>'/api/file?'+new URLSearchParams({m:f.msg,a:f.id,n:f.name,t:f.type});
 const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:/image/.test(f.type)?QrCode:FileText;
 // How many tickets the event has (one PDF may hold several), so the buttons say כרטיס or כרטיסים.
@@ -237,7 +240,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   {menu&&<div className="menuWrap" onClick={()=>setMenu(null)}><div className="menu" role="dialog" aria-modal="true" aria-label={'פעולות: '+menu.title} onClick={e=>e.stopPropagation()} {...swipeClose(()=>setMenu(null))}><SheetTop close={()=>setMenu(null)}/>
    <p className="menuTitle">{bidi(menu.title)}</p>
    {(()=>{const fs=menu.files.filter(f=>!/pkpass/i.test(f.type+f.name));return fs.length>0&&<button onClick={()=>{setMenuView(fs);}}><QrCode size={20}/> {showLabel(menu)}</button>;})()}
-   {where(menu)&&<div className="menuNav"><div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(where(menu))+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(where(menu))} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
+   {where(menu)&&<div className="menuNav"><NavLinks q={where(menu)}/></div>}
    {upcoming(menu)&&!menu.cancelled&&<button onClick={()=>{addToCalendar(menu);setMenu(null);}}><CalendarPlus size={20}/> הוספה ליומן</button>}
    {menu.order&&<button onClick={()=>{navigator.clipboard?.writeText(menu.order!).then(()=>say('הועתק'),()=>{});setMenu(null);}}><Copy size={20}/> העתק מספר הזמנה</button>}
    {'share' in navigator&&<button onClick={()=>{navigator.share({title:menu.title,text:[menu.title,longDate(menu)+(timed(menu)?' בשעה '+time(menu):''),place(menu)].filter(Boolean).join('\n')}).catch(()=>{});setMenu(null);}}><Share2 size={20}/> שיתוף</button>}
@@ -315,7 +318,7 @@ function Sheet({t,me,onClose,onRename,onHide,onCopy}:{t:Ticket;me:string;onClose
   {!t.cancelled&&t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{(()=>{const docs=t.files.filter(f=>!/pkpass/i.test(f.type+f.name));return docs.length>1&&<button className="file all" onClick={()=>setView(docs)}><QrCode size={22}/><span>{'הצג הכל ('+nTickets(t)+' כרטיסים)'}</span></button>;})()}{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView([f])}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}</div></div>}
   {!t.cancelled&&t.files.length===0&&t.links.length>0&&<div className="box"><h3><TicketIcon/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.links.map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>{l.label}</span></a>)}</div></div>}
   {w&&<div className="box"><h3><MapPin/>מקום</h3>{t.venue&&<p className="place">{bidi(t.venue)}</p>}{(t.address||t.city)&&<p className="addr">{bidi([t.address,t.city].filter(Boolean).join(', '))}</p>}
-   <div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(w)+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(w)} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
+   <NavLinks q={w}/></div>}
   {t.seats.length>0&&<div className="box"><h3><Armchair/>{t.seats.length===1?'המקום שלך':t.seats.length+' מקומות'}</h3><ul className="seats">{t.seats.map((s,i)=><li key={i}><i>{i+1}</i>{s}</li>)}</ul></div>}
   {(t.order||t.count||t.price)&&<div className="box"><h3><TicketIcon/>פרטי ההזמנה</h3>
    {t.order&&t.order.split(', ').map((o,i,a)=><div className="kv" key={o}><span>{a.length>1?'הזמנה '+(i+1):'מספר הזמנה'}</span><button className="copy" onClick={()=>copy(o)}><b dir="ltr">{o}</b><Copy size={17}/></button></div>)}

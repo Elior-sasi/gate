@@ -1,6 +1,7 @@
 import type {Metadata} from 'next';
 import {getShare} from '@/lib/share';
 import {dbOn} from '@/lib/push';
+import {navQuery,navLinks} from '@/lib/place';
 export const dynamic='force-dynamic';
 export const metadata:Metadata={title:'כרטיס - Unstage',robots:{index:false,follow:false}};
 const KIND:Record<string,string>={concert:'הופעה',show:'הצגה',movie:'סרט',lecture:'הרצאה',sport:'משחק',festival:'פסטיבל',standup:'סטנדאפ',other:'אירוע'};
@@ -12,7 +13,7 @@ export default async function Shared({params}:{params:Promise<{id:string}>}){con
  const s=dbOn()||id==='demo'?await getShare(id).catch(()=>null):null;const live=!!s&&s.expires.getTime()>Date.now()&&!!s.refresh;
  const brand=<header className="top"><div className="row"><span className="brand" dir="ltr" aria-label="Unstage"><img src="/logo.svg" alt="" width={34} height={34} style={{borderRadius:9}}/><span aria-hidden="true">nstage</span></span></div></header>;
  if(!s||!live)return <main className="app">{brand}<section className="panel empty"><h2>הקישור כבר לא בתוקף</h2><p>הקישור לכרטיס פג אחרי האירוע, או שמי ששלח אותו ביטל אותו. אפשר לבקש ממנו לשלוח שוב.</p></section></main>;
- const t=s.data;const time=t.start.split('T')[1]||'';const place=[t.venue,t.city].filter(Boolean).join(', ');const where=[t.venue,t.address,t.city].filter(Boolean).join(', ');
+ const t=s.data;const time=t.start.split('T')[1]||'';const place=[t.venue,t.city].filter(Boolean).join(', ');const nav=navLinks(navQuery(t));
  const docs=t.files.map((f,i)=>({f,i})).filter(x=>!/pkpass/i.test(x.f.type+x.f.name));const pass=t.files.map((f,i)=>({f,i})).filter(x=>/pkpass/i.test(x.f.type+x.f.name));
  const url=(i:number)=>'/api/share-file?s='+id+'&i='+i;
  return <main className="app">
@@ -27,6 +28,6 @@ export default async function Shared({params}:{params:Promise<{id:string}>}){con
    {!docs.length&&t.links.map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><span>{l.label}</span></a>)}</div></div>}
   {t.seats.length>0&&<div className="box"><h3>{t.seats.length>1?t.seats.length+' מקומות':'המקום'}</h3><ul className="seats">{t.seats.map((x,i)=><li key={x}><i>{i+1}</i>{bidi(x)}</li>)}</ul></div>}
   {place&&<div className="box"><h3>מקום</h3><p className="place">{bidi(place)}</p>{t.address&&<p className="addr">{t.address}</p>}
-   <div className="cxBtns"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(where)+'&navigate=yes'} target="_blank" rel="noopener noreferrer">Waze</a><a className="ghost" href={'https://maps.apple.com/?q='+encodeURIComponent(where)} target="_blank" rel="noopener noreferrer">מפות</a></div></div>}
+   <div className="navLinks"><a className="ghost" href={nav.google} target="_blank" rel="noopener noreferrer">Google Maps</a><a className="ghost" href={nav.moovit} target="_blank" rel="noopener noreferrer">Moovit</a><a className="ghost" href={nav.waze} target="_blank" rel="noopener noreferrer">Waze</a></div></div>}
   <p className="footnote">הקישור אישי ויפסיק לעבוד אחרי האירוע. נשלח דרך <a href="/" style={{color:'inherit'}}>Unstage</a>.</p>
  </main>;}
