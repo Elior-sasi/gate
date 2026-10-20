@@ -2,16 +2,20 @@
 // some days after the event, or before the ticket is sent on to someone, so the ticket is copied while the link still opens.
 // PDFs and images are kept as they are; a ticket page is kept as one self-contained page (its pictures and styles inside it, no scripts).
 import {createHash} from 'node:crypto';
+import {presApi,presTicket,type PresInfo} from '@/lib/pres';
 const UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const MAX=2_500_000;
 async function grab(url:string,limit=MAX){const r=await fetch(url,{headers:{'User-Agent':UA,Accept:'*/*','Accept-Language':'he-IL,he;q=0.9,en;q=0.8'},redirect:'follow',signal:AbortSignal.timeout(12000)});
  if(!r.ok)throw new Error('HTTP '+r.status);const len=Number(r.headers.get('content-length')||0);if(len>limit)throw new Error('big');
  const buf=Buffer.from(await r.arrayBuffer());if(buf.length>limit)throw new Error('big');return {buf,type:(r.headers.get('content-type')||'').split(';')[0].trim().toLowerCase(),url:r.url||url};}
 const abs=(u:string,base:string)=>{try{return new URL(u.replace(/&amp;/g,'&'),base).href;}catch{return '';}};
-export type Kept={type:string;data:string;name:string};
+export type Kept={type:string;data:string;name:string;info?:PresInfo};
 export const keyOf=(url:string)=>createHash('sha256').update(url).digest('base64url').slice(0,22);
 export async function snapshot(url:string,label:string):Promise<Kept|null>{
- if(!/^https?:\/\//i.test(url))return null;const g=await grab(url);
+ if(!/^https?:\/\//i.test(url))return null;
+ // Pages built by scripts that have a known data source: the ticket is drawn from the data (lib/pres).
+ if(presApi(url)){const p=await presTicket(url).catch(()=>null);return p?{type:'text/html',data:Buffer.from(p.html,'utf8').toString('base64'),name:label+'.html',info:p.info}:null;}
+ const g=await grab(url);
  if(g.type==='application/pdf'||/^image\/(png|jpe?g|gif|webp)$/.test(g.type))return {type:g.type,data:g.buf.toString('base64'),name:label+(g.type==='application/pdf'?'.pdf':'.png')};
  if(!/html/.test(g.type))return null;
  let h=g.buf.toString('utf8');

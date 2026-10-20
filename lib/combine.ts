@@ -90,3 +90,9 @@ export function mergeAll(a:Ticket[],b:Ticket[]){let out=[...a];
  return out;}
 // The files to show and keep offline: replaced tickets are left out.
 export const current=(t:Ticket)=>t.files.filter(f=>!f.stale);
+// A ticket that came by SMS with its details read (lib/pres): it is the newest reading of its order, so its seats replace that order's,
+// and its time is the newest statement of it.
+export function withSms(t:Ticket,key:string,at:number,i:{order?:string;seats:string[];count:number;price?:string;start?:string;hall?:string;venue?:string}):Ticket{
+ const parts={...partsOf(t),[key]:{seats:i.seats,count:i.count,price:i.price,order:i.order,mailed:at,update:true} as Part};const tot=totals(parts);
+ const start=i.start&&i.start!==t.start?{start:i.start,at:{...t.at,start:at}}:{};
+ return {...t,...start,parts:byOrder(parts),seats:tot.seats,count:tot.count,price:tot.price??t.price,files:freshFiles(t.files,parts)};}

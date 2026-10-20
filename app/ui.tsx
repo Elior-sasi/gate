@@ -3,7 +3,8 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
 import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,Bus,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
-import {mergeAll,status,cleanSeats,current} from '@/lib/combine';
+import {mergeAll,status,cleanSeats,current,withSms} from '@/lib/combine';
+import type {PresInfo} from '@/lib/pres';
 import {sellerCancel,contacts,LAW} from '@/lib/sellers';
 import {navQuery,navLinks} from '@/lib/place';
 import {offlinePlan,personalKeys} from '@/lib/offline';
@@ -181,16 +182,19 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  // Tickets that came by SMS (forwarded by the iPhone Shortcut, or pasted): the kept copy is added to its event as the newest ticket of that order.
  // One that matches no event yet waits on the phone until a scan brings the event.
  const SMS=(u:string)=>'gate:sms:'+u;const [smsLast,setSmsLast]=useState<{at:string;kind:string;shape?:string;raw?:number}|null>(null);
- const pullSms=useCallback(async()=>{if(!user||user.id==='demo'||!navigator.onLine)return;let got:(SmsTicket&{file?:TFile|null;at:string})[]=[];
+ const pullSms=useCallback(async()=>{if(!user||user.id==='demo'||!navigator.onLine)return;let got:(SmsTicket&{file?:TFile|null;at:string;info?:PresInfo})[]=[];
   try{const r=await fetch('/api/sms',{cache:'no-store'});if(r.ok){const d=await r.json();got=d.items||[];setSmsLast(d.last||null);}}catch{}
   const waiting=[...load(SMS(user.id),[] as typeof got),...got].filter(x=>x.url&&Date.now()-new Date(x.at).getTime()<60*864e5);if(!waiting.length)return;
   const left:typeof got=[];let added='';
-  setStore(s=>{let tickets=s.tickets;for(const x of waiting){const m=matchSms(tickets,x);if(!m){left.push(x);continue;}
+  setStore(s=>{let tickets=s.tickets;for(const x of waiting){const m=matchSms(tickets,x.info?.order&&!x.ref?{...x,ref:x.info.order}:x);if(!m){left.push(x);continue;}
     // The page could not be copied (built by scripts, or it asked to sign in): the SMS link itself is added to the event instead.
     if(!x.file){tickets=tickets.map(t=>t.key!==m.event.key||t.links.some(l=>l.url===x.url)?t:{...t,links:[{label:'הכרטיס מ-SMS',url:x.url},...t.links].slice(0,5)});added=m.event.title;continue;}
     const at=new Date(x.at).getTime();const f:TFile={...x.file,msg:'sms'+at,at,...(m.order?{order:m.order}:{})};
-    // Same order: the SMS ticket is the newer one, so the older file of that order steps aside (it stays known, not shown).
-    tickets=tickets.map(t=>t.key!==m.event.key||t.files.some(g=>g.id===f.id)?t:{...t,files:[...t.files.map(g=>m.order&&g.order===m.order&&!/pkpass/i.test(g.type+g.name)?{...g,stale:true}:g),f]});added=m.event.title;}
+    // Same order: the SMS ticket is the newer one, so the older file of that order steps aside (it stays known, not shown),
+    // and its seats (read from the ticket itself) replace that order's seats. The bare SMS link, if added before, goes.
+    tickets=tickets.map(t=>{if(t.key!==m.event.key||t.files.some(g=>g.id===f.id))return t;
+     let n:Ticket={...t,links:t.links.filter(l=>l.url!==x.url),files:[...t.files.map(g=>m.order&&g.order===m.order&&!/pkpass/i.test(g.type+g.name)?{...g,stale:true}:g),f]};
+     if(x.info&&x.info.seats.length)n=withSms(n,'m:'+f.msg,at,{...x.info,order:m.order||x.info.order});return n;});added=m.event.title;}
    const n={...s,tickets};save(KEY(user.id),n);return n;});
   save(SMS(user.id),left);if(added)say('כרטיס מ-SMS נוסף ל'+added);},[user]);
  useEffect(()=>{if(ready&&!busy)void pullSms();},[ready,busy,pullSms]);
