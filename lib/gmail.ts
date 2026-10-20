@@ -32,8 +32,8 @@ export function bodyText(m:Message){let plain='',html='';
  const h=html?htmlText(html):'';return plain.trim().length>200||!h?plain.trim():h;}
 // Links in the mail that open the ticket on the seller's site ("לצפייה בכרטיס", "View tickets").
 export function ticketLinks(m:Message){let html='';const walk=(p?:Part)=>{if(!p)return;if(p.mimeType==='text/html'&&!html)html=decode(p.body?.data);p.parts?.forEach(walk);};walk(m.payload);
- const out:{label:string;url:string}[]=[];for(const a of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){const label=htmlText(a[2]).replace(/\s+/g,' ').trim();
-  if(/^https?:\/\//.test(a[1])&&label.length<40&&/כרטיס|ticket|הזמנה שלי|צפייה בהזמנה|view order|wallet|ארנק|ביטול|ניהול (?:ה)?הזמנה|cancel|manage|booking management/i.test(label)&&!/unsubscribe|הסר/i.test(label)&&!out.some(o=>o.url===a[1]))out.push({label,url:a[1].replace(/&amp;/g,'&')});}
+ const out:{label:string;url:string;msg?:string}[]=[];for(const a of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){const label=htmlText(a[2]).replace(/\s+/g,' ').trim();
+  if(/^https?:\/\//.test(a[1])&&label.length<40&&/כרטיס|ticket|הזמנה שלי|צפייה בהזמנה|view order|wallet|ארנק|ביטול|ניהול (?:ה)?הזמנה|cancel|manage|booking management/i.test(label)&&!/unsubscribe|הסר/i.test(label)&&!out.some(o=>o.url===a[1]))out.push({label,url:a[1].replace(/&amp;/g,'&'),msg:m.id});}
  return out.slice(0,5);}
 export type File={id:string;name:string;type:string;size:number};
 // Ticket files: PDFs, Apple Wallet passes and barcode/QR images (logos and tiny pictures are left out).

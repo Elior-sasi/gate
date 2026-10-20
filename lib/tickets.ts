@@ -9,7 +9,7 @@ export type TFile={msg:string;id:string;name:string;type:string;size:number;at?:
 // mailed: when this mail was sent; update: the mail announces a change (new time, place, seats or a replacement ticket); restored: the event is back on.
 export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean;mailed?:number;update?:boolean;restored?:boolean};
 export type Ticket={parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
- seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean;seller?:string;cancel?:{text?:string;url?:string;label?:string};
+ seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string;msg?:string}[];mailed:number;ai?:boolean;cancelled?:boolean;seller?:string;cancel?:{text?:string;url?:string;label?:string};
  update?:boolean;restored?:boolean;at?:{start?:number;venue?:number;doors?:number}};
 const HE_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const EN_MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
@@ -163,6 +163,8 @@ export async function readTicket(m:Message,last=false):Promise<Read>{
  if(ai.ok){let t=ai.ticket;
   if(!t&&(rule?.cancelled||rule?.restored)&&rule.order)t=rule;
   if(t&&rule?.order&&(!t.order||t.cancelled))t={...t,order:rule.order};
+  // Gemini sometimes gives only the hall ("אולם 15"); the rules know the branch ("פלאנט איילון - אולם 15").
+  if(t&&rule?.venue&&(!t.venue||/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(t.venue.trim())))t={...t,venue:rule.venue};
   return {ticket:t?withKey(t):null,retry:false};}
  // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).
  if(process.env.GEMINI_API_KEY&&!last)return {ticket:rule?withKey(rule):null,retry:true};

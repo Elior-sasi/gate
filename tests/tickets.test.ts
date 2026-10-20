@@ -43,7 +43,7 @@ test('the same order read twice, and seats written three ways, count once',async
  const ai=withKey({...base,key:'',msgs:['m1'],order:'16320-39278-74340',seats:['אזור: אולם, שורה: 1, כיסא: 5','אזור: אולם, שורה: 1, כיסא: 6'],count:2,ai:true,mailed:1});
  const remind=withKey({...base,key:'',msgs:['m9'],order:'16320-39278-74340',seats:['שורה 1, כיסא 5','שורה 1, כיסא 6'],count:2,ai:true,mailed:5});
  const other=withKey({...base,key:'',msgs:['m2'],order:'20980-39279-55490',seats:['אזור: אולם, שורה: 1, כיסא: 2'],count:1,ai:true,mailed:2});
- const all=mergeAll([],[rule,ai,remind,other]);assert.equal(all.length,1);assert.equal(all[0].count,3);assert.deepEqual(all[0].seats,['שורה 1, כיסא 5','שורה 1, כיסא 6','שורה 1, כיסא 2']);});
+ const all=mergeAll([],[rule,ai,remind,other]);assert.equal(all.length,1);assert.equal(all[0].count,3);assert.deepEqual(all[0].seats,['שורה 1, כיסא 2','שורה 1, כיסא 5','שורה 1, כיסא 6']);});
 test('cancellations: one order of three, a whole event, and a notice with no date',async()=>{const {mergeAll}=await import('@/lib/combine');
  const base={thread:'t',title:'טארה סטרונג - מאסטרקלאס',kind:'lecture' as const,start:'2026-11-03T17:00',files:[],links:[],ai:true};
  const a=withKey({...base,key:'',msgs:['m1'],order:'111-1',seats:['שורה 1, כיסא 5','שורה 1, כיסא 6'],count:2,price:'86 ₪',mailed:1});

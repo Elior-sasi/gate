@@ -16,7 +16,9 @@ const SEAT=/(?:אזור\s*:?\s*([^,]+?)\s*,\s*)?שורה\s*:?\s*([\w֐-׿]+)\s*,
 export function cleanSeats(list:string[]){const out:string[]=[];const seen=new Set<string>();
  for(const raw of list){const m=raw.match(SEAT);const key=m?m[2]+'|'+m[3]:raw.trim();if(seen.has(key))continue;seen.add(key);// "אזור: אולם" (the main hall) says nothing, so only a real area is kept ("גוש 12", "יציע מזרחי").
   const area=m?.[1]?.trim()||'';out.push(m?(area&&!/^(?:אולם|האולם|כללי|רגיל|ראשי|hall|main|general)$/i.test(area)?'אזור '+area+', ':'')+'שורה '+m[2]+', כיסא '+m[3]:raw.trim());}
- return out;}
+ // In order: by area, row, then seat number (7, 8, 9, 10 - not 10, 7, 8, 9).
+ const k=(x:string)=>{const m=x.match(SEAT);return m?[m[1]||'',m[2].padStart(4,'0'),m[3].padStart(4,'0')].join('|'):'~'+x;};
+ return out.sort((a,b)=>k(a)<k(b)?-1:k(a)>k(b)?1:0);}
 // A cancellation, restoration or change notice with no seats, count or price of its own: it marks the order, it is not more tickets.
 const notice=(p:Part)=>(p.cancelled||p.restored)&&!p.seats?.length&&!p.count&&!p.price;
 const at=(p:Part)=>p.mailed||0;

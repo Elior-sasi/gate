@@ -41,13 +41,16 @@ function inFile(t:Ticket,f:TFile){const docs=t.files.filter(g=>!/pkpass|image/i.
  const p=t.parts?.['m:'+f.msg];const same=docs.filter(g=>g.msg===f.msg).length;if(!p||same!==1)return {n:1,seats:[] as string[]};const seats=cleanSeats(p.seats||[]);return {n:Math.max(p.count||0,seats.length,1),seats};}
 const seatShort=(s:string[])=>{if(!s.length)return '';const m=s.map(x=>x.match(/שורה (\S+), כיסא (\d+)/)).filter(Boolean) as RegExpMatchArray[];
  if(m.length===s.length&&m.every(x=>x[1]===m[0][1]))return 'שורה '+m[0][1]+', '+(m.length>1?'כיסאות '+m.map(x=>x[2]).join(', '):'כיסא '+m[0][2]);return s.join(' · ');};
+// A venue that is only the hall ("אולם 15", "אולם - אולם 1") gets the place in front of it, from the seller ("סינמטק תל אביב - אולם 1").
+function fullVenue(t:Ticket){const v=(t.venue||'').replace(/^\s*(?:אולם|hall)\s*[-–:]\s*(?=(?:אולם|hall)\b)/i,'').trim();
+ if(!/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(v))return t.venue;const p=(t.provider||'').replace(/^(?:Planet Cinema)$/i,'פלאנט').trim();return p&&!/^[\w.+-]+@/.test(p)?p+' - '+v:v;}
 const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):k>1?k+' כרטיסים':'כרטיס'+(n>1&&k<1?' '+(i+1):'');
 // Latin runs (with their dashes, commas and colons) are kept together left-to-right inside Hebrew text: "CHAINSAW MAN – THE MOVIE" stays in one piece.
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
 const NAM=(u:string)=>'gate:names:'+u;
 // Events the user marked cancelled by hand (some sellers send no cancellation mail, e.g. a cancel by SMS or at the box office).
 const MCX=(u:string)=>'gate:mycx:'+u;
-const KEY=(u:string)=>'gate:v11:'+u;const HID=(u:string)=>'gate:hidden:'+u;
+const KEY=(u:string)=>'gate:v12:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
 function addToCalendar(t:Ticket){const f=document.createElement('form');f.method='POST';f.action='/api/ics';
@@ -195,7 +198,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    setChat(c=>[...c,{role:'model',text:d.answer||(d.error==='busy'?'אני עמוס כרגע, נסה שוב בעוד דקה.':'לא הצלחתי לענות כרגע.')}]);}catch{setChat(c=>[...c,{role:'model',text:'לא הצלחתי לענות כרגע.'}]);}finally{setAsking(false);}}
  const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Unstage</div></div>;
  // Replaced tickets (a newer one came for the same order) are never shown.
- const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t),seats:cleanSeats(t.seats),kind:fixKind(t.kind==='sport'&&/מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית)\)/.test(t.title)?'movie':t.kind,t.seller),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{})})),[store.tickets,names,mycx]);
+ const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t),seats:cleanSeats(t.seats),venue:fullVenue(t),kind:fixKind(t.kind==='sport'&&/מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית)\)/.test(t.title)?'movie':t.kind,t.seller),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{})})),[store.tickets,names,mycx]);
  const visible=useMemo(()=>{const s=q.trim().toLowerCase();return named.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[named,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)&&!t.cancelled).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
  const past=useMemo(()=>visible.filter(t=>!upcoming(t)&&!t.cancelled).sort((a,b)=>when(b).getTime()-when(a).getTime()),[visible]);
@@ -340,7 +343,9 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy}:{t:Ticket&{m
   {!t.cancelled&&t.parts&&status(t.parts).some&&<p className="setNote" style={{color:'var(--bad)',textAlign:'center'}}>חלק מההזמנות בוטלו. הכרטיסים והמחיר כאן הם רק של מה שבתוקף.</p>}
   {t.cancelled&&<div className="box"><p className="setNote" style={{margin:0,color:'var(--bad)'}}>ההזמנה בוטלה, והכרטיסים שלה כבר לא בתוקף.</p></div>}
   {!t.cancelled&&t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{(()=>{const docs=t.files.filter(f=>!/pkpass/i.test(f.type+f.name));return docs.length>1&&<button className="file all" onClick={()=>setView(docs)}><QrCode size={22}/><span>{'הצג הכל ('+nTickets(t)+' כרטיסים)'}</span></button>;})()}{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView([f])}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}</div></div>}
-  {!t.cancelled&&t.files.length===0&&t.links.length>0&&<div className="box"><h3><TicketIcon/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.links.map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>{l.label}</span></a>)}</div></div>}
+  {!t.cancelled&&t.files.length===0&&t.links.length>0&&<div className="box"><h3><TicketIcon/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.links.map((l,i,a)=>{// Several orders' links all say "לחצו כאן לקבלת הכרטיסים": each says how many tickets it opens and which seats.
+   const same=a.filter(x=>x.label===l.label).length>1;const p=l.msg?t.parts?.['m:'+l.msg]:undefined;const seats=p?cleanSeats(p.seats||[]):[];const n=p?Math.max(p.count||0,seats.length,1):0;
+   return <a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>{same?(n?(n>1?n+' כרטיסים':'כרטיס'):'הכרטיסים '+(i+1)):l.label}</span>{same&&seats.length>0&&<small>{seatShort(seats)}</small>}</a>;})}</div></div>}
   {w&&<div className="box"><h3><MapPin/>מקום</h3>{t.venue&&<p className="place">{bidi(t.venue)}</p>}{(t.address||t.city)&&<p className="addr">{bidi([t.address,t.city].filter(Boolean).join(', '))}</p>}
    <NavLinks q={w}/></div>}
   {t.seats.length>0&&<div className="box"><h3><Armchair/>{t.seats.length===1?'המקום שלך':t.seats.length+' מקומות'}</h3><ul className="seats">{t.seats.map((s,i)=><li key={i}><i>{i+1}</i>{s}</li>)}</ul></div>}
