@@ -11,7 +11,8 @@ export function partsOf(t:Ticket):Record<string,Part>{return t.parts&&Object.key
 // Seats written in different ways ("אזור: אולם, שורה: 1, כיסא: 5", "שורה 1, כיסא 5") are the same seat.
 const SEAT=/(?:אזור\s*:?\s*([^,]+?)\s*,\s*)?שורה\s*:?\s*([\w\u0590-\u05FF]+)\s*,\s*כי?סא\s*:?\s*(\d+)/;
 export function cleanSeats(list:string[]){const out:string[]=[];const seen=new Set<string>();
- for(const raw of list){const m=raw.match(SEAT);const key=m?m[2]+'|'+m[3]:raw.trim();if(seen.has(key))continue;seen.add(key);out.push(m?(m[1]?'אזור '+m[1].trim()+', ':'')+'שורה '+m[2]+', כיסא '+m[3]:raw.trim());}
+ for(const raw of list){const m=raw.match(SEAT);const key=m?m[2]+'|'+m[3]:raw.trim();if(seen.has(key))continue;seen.add(key);// "אזור: אולם" (the main hall) says nothing, so only a real area is kept ("גוש 12", "יציע מזרחי").
+  const area=m?.[1]?.trim()||'';out.push(m?(area&&!/^(?:אולם|האולם|כללי|רגיל|ראשי|hall|main|general)$/i.test(area)?'אזור '+area+', ':'')+'שורה '+m[2]+', כיסא '+m[3]:raw.trim());}
  return out;}
 // Parts of the same order (two mails about it) count once; the fuller reading wins.
 function byOrder(parts:Record<string,Part>){const out:Record<string,Part>={};const seen:Record<string,string>={};
