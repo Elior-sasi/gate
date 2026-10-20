@@ -1,5 +1,6 @@
 import type {Kind} from '@/lib/tickets';
-// Cinema chains sell films (and the odd talk): what they sell is never a sports match or a concert, whatever the title says
-// ("קיוטי נגד אקמי" is a cartoon, not a game).
+// Cinemas mostly sell films, but also screen matches and concerts. So a cinema purchase is a film unless the mail says otherwise
+// with real signs: a match needs team or league words ("מכבי", "ליגה", "גמר"), not just "נגד" ("קיוטי נגד אקמי" is a cartoon).
 const CINEMA=/(?:^|\.)(?:cinema-city|planetcinema|yesplanet|rav-hen|lev|hotcinema|globusmax|jer-cin|cinematheque)\.co(?:\.il)?$|jer-cin\.org\.il$/i;
-export const fixKind=(k:Kind,seller?:string):Kind=>seller&&CINEMA.test(seller)&&!['lecture','movie'].includes(k)?'movie':k;
+const SPORT=/מכבי|הפועל|בית"ר|בית״ר|ליגה|ליגת|יורוליג|מונדיאל|גביע|גמר|דרבי|נבחרת|כדורגל|כדורסל|טניס|אגרוף|UFC|NBA|NFL|F1|פורמולה|world cup|champions|league|final/i;
+export const fixKind=(k:Kind,seller?:string,title=''):Kind=>!seller||!CINEMA.test(seller)?k:k==='sport'&&!SPORT.test(title)?'movie':k==='other'?'movie':k;

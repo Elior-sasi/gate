@@ -111,7 +111,7 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
  const hour=start&&!start.includes('T')&&pick(text,/(?:בשעה|שעה|at)\s*[-:|]?\s*(\d{1,2}:\d{2})/i);
  if(!cancelled&&!fromSeller(m)&&!files.length&&!seatsIn(text).length&&!/כרטיס|ticket|הופעה|הצגה|הקרנה|מופע|כנס|הרצאה/i.test(subject))return null;
  const k=guessKind(title);const links=ticketLinks(m);const thanks=pick(text,/תודה על הזמנתך ב([^\n.]{3,40})/);
- return {key:'',msgs:[m.id],thread:m.threadId,title,kind:fixKind(k!=='other'?k:kindOf(subject,text),sellerOf(m)),start:hour?start+'T'+hour.padStart(5,'0'):start,
+ return {key:'',msgs:[m.id],thread:m.threadId,title,kind:fixKind(k!=='other'?k:kindOf(subject,text),sellerOf(m),title),start:hour?start+'T'+hour.padStart(5,'0'):start,
   doors:pick(text,/(?:פתיחת (?:דלתות|שערים)|doors open)\s*[:\-|]?\s*(\d{1,2}:\d{2})/i)||undefined,
   venue:(pres>0?lines[pres-1].slice(1).trim():'')||field(text,'מקום(?: האירוע)?|אולם|מיקום|היכל|venue|location')||(thanks?thanks+(row?' - '+row[4]:''):'')||undefined,
   address:field(text,'כתובת|address')||undefined,
@@ -146,7 +146,7 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  // A cancellation may leave out the date: it is kept only to be joined to the event it cancels (by order number or name).
  if(!j.isTicket||(!dated&&!cx&&!sig.restored))return {ok:true,ticket:null};
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;const links=ticketLinks(m);
- return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:fixKind((['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,sellerOf(m)),
+ return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:fixKind((['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,sellerOf(m),s(j.title)||subject),
   start:dated?String(j.start).slice(0,16):'',doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
   order:j.eventCancelled&&!j.order?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,...(sig.update?{update:true}:{}),...(sig.restored?{restored:true}:{}),
   cancel:cx?undefined:(()=>{const c=cancelInfo(text,links);const p=typeof j.cancelPolicy==='string'&&j.cancelPolicy.trim()?j.cancelPolicy.trim().slice(0,300):'';return p||c?{...c,text:c?.text||p}:undefined;})()}};}
