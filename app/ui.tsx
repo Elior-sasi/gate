@@ -180,7 +180,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    finally{keeping.current=false;}})();},[user,busy,store.tickets]);
  // Tickets that came by SMS (forwarded by the iPhone Shortcut, or pasted): the kept copy is added to its event as the newest ticket of that order.
  // One that matches no event yet waits on the phone until a scan brings the event.
- const SMS=(u:string)=>'gate:sms:'+u;const [smsLast,setSmsLast]=useState<{at:string;kind:string}|null>(null);
+ const SMS=(u:string)=>'gate:sms:'+u;const [smsLast,setSmsLast]=useState<{at:string;kind:string;shape?:string;raw?:number}|null>(null);
  const pullSms=useCallback(async()=>{if(!user||user.id==='demo'||!navigator.onLine)return;let got:(SmsTicket&{file?:TFile|null;at:string})[]=[];
   try{const r=await fetch('/api/sms',{cache:'no-store'});if(r.ok){const d=await r.json();got=d.items||[];setSmsLast(d.last||null);}}catch{}
   const waiting=[...load(SMS(user.id),[] as typeof got),...got].filter(x=>x.url&&Date.now()-new Date(x.at).getTime()<60*864e5);if(!waiting.length)return;
@@ -341,14 +341,14 @@ function Gift({t,me,onClose}:{t:Ticket;me:string;onClose:()=>void}){const docs=t
   {msg&&<p className="setNote" role="status" style={{textAlign:'center'}}>{msg}</p>}
  </div></div>;}
 // Tickets by SMS, as Unbox does it: an iPhone Shortcut forwards every message with "כרטיס" to the personal link. A message can also be pasted here.
-function SmsSet({link,last,onCopy,onPasted}:{link:string;last:{at:string;kind:string}|null;onCopy:(t:string)=>void;onPasted:()=>void}){const [text,setText]=useState('');const [msg,setMsg]=useState('');const [busy,setBusy]=useState(false);
+function SmsSet({link,last,onCopy,onPasted}:{link:string;last:{at:string;kind:string;shape?:string;raw?:number}|null;onCopy:(t:string)=>void;onPasted:()=>void}){const [text,setText]=useState('');const [msg,setMsg]=useState('');const [busy,setBusy]=useState(false);
  const paste=async()=>{if(!text.trim())return;setBusy(true);setMsg('');try{const r=await fetch(link,{method:'POST',headers:{'Content-Type':'text/plain'},body:text});const d=await r.json().catch(()=>({}));
    setMsg(!d.ticket?'לא מצאתי בהודעה קישור לכרטיס.':d.kept?'הכרטיס נשמר ✓':'קיבלתי את ההודעה, אבל לא הצלחתי לפתוח את הקישור לכרטיס.');if(d.ticket){setText('');onPasted();}}catch{setMsg('לא הצלחתי לשלוח. נסה שוב.');}finally{setBusy(false);}};
  return <div className="set"><h3><Smartphone size={18}/>כרטיסים מ-SMS</h3>
   <p className="setNote">יש מקומות ששולחים את הכרטיס ב-SMS ולא במייל, כמו הסינמטק. הכרטיס נשמר ומצטרף לאירוע שלו. מגדירים פעם אחת באפליקציית קיצורי הדרך:</p>
   <ol className="steps2"><li>קיצורים ← אוטומציה ← אוטומציה חדשה ← <b>הודעה</b>.</li><li>"ההודעה מכילה": <b>כרטיס</b>. בחר <b>הרץ מיד</b>.</li><li>פעולה: <b>קבל תוכן של URL</b>. בכתובת הדבק את הקישור האישי, שיטה <b>POST</b>, גוף בקשה <b>טקסט</b> = תוכן ההודעה.</li></ol>
   <button className="ghost" onClick={()=>onCopy(link)}><Copy size={18}/>העתקת הקישור האישי</button>
-  <p className="setNote" role="status">{last?'הודעה אחרונה הגיעה ב־'+new Date(last.at).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(last.kind==='ticket'?' וזוהתה ככרטיס ✓':last.kind==='empty'?', אבל בלי טקסט':', אבל לא נמצא בה קישור לכרטיס'):'עדיין לא הגיעה אף הודעה מהקיצור.'}</p>
+  <p className="setNote" role="status">{last?'הודעה אחרונה הגיעה ב־'+new Date(last.at).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(last.kind==='ticket'?' וזוהתה ככרטיס ✓':last.kind==='empty'?', אבל בלי טקסט (הקיצור שלח '+(last.raw??0)+' תווים'+(last.shape?', '+last.shape:'')+')':', אבל לא נמצא בה קישור לכרטיס'):'עדיין לא הגיעה אף הודעה מהקיצור.'}</p>
   <label className="setNote" htmlFor="smsPaste" style={{display:'block',marginTop:10}}>או הדבק כאן הודעה עם כרטיס:</label>
   <textarea id="smsPaste" className="smsBox" rows={3} value={text} onChange={e=>setText(e.target.value)} placeholder="מצורפים הכרטיסים שהזמנת…"/>
   <button className="ghost" disabled={busy||!text.trim()} onClick={paste}><Send size={18}/>{busy?'שומר…':'הוספת הכרטיס'}</button>
@@ -402,7 +402,7 @@ const code=await new Request(u+'&js=1').loadString().catch(()=>'')
 const AF=Object.getPrototypeOf(async function(){}).constructor
 if(code&&code.includes('ListWidget')){await new AF('r',code)(r)}else{const w=new ListWidget();w.backgroundColor=new Color('#0a0f14');const t=w.addText(r&&r.lines?r.lines.map(x=>x.t).join('\\n'):'אין נתונים כרגע');t.textColor=Color.white();t.font=Font.boldSystemFont(15);if(config.runsInWidget)Script.setWidget(w);else await w.presentSmall();Script.complete()}`;
 type SrvProps={srv:{enabled:boolean;devices?:number;calendar?:string;widget?:string;sms?:string}|null;push:string;pushMsg:string;onPush:()=>void;onTest:()=>void;onCopy:(t:string)=>void};
-function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan,size,onSize,smsLast,onSmsPasted}:{smsLast:{at:string;kind:string}|null;onSmsPasted:()=>void;user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void;size:number;onSize:(i:number)=>void}&SrvProps){
+function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan,size,onSize,smsLast,onSmsPasted}:{smsLast:{at:string;kind:string;shape?:string;raw?:number}|null;onSmsPasted:()=>void;user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void;size:number;onSize:(i:number)=>void}&SrvProps){
  const noDb=srv&&!srv.enabled;
  const slideSize=useRowSlide();const speakUrl=srv?.widget?.replace('/api/widget','/api/speak');
  return <><div className="settings">

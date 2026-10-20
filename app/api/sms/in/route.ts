@@ -9,13 +9,19 @@ export const dynamic='force-dynamic';export const maxDuration=40;
 export async function POST(req:NextRequest){
  if(!dbOn())return Response.json({ok:false,error:'no-db'},{status:503});
  const user=tokenUser(req.nextUrl.searchParams.get('t')||'','sms');if(!user)return Response.json({ok:false,error:'bad link'},{status:401});
- let text='';const type=req.headers.get('content-type')||'';
- try{if(type.includes('json'))text=String((await req.json()).text||'');
-  else if(type.includes('multipart/form-data')||type.includes('x-www-form-urlencoded')){const f=await req.formData();for(const v of f.values()){text=typeof v==='string'?v:await v.text();if(text.trim())break;}}
-  else text=await req.text();}catch{}
+ // Shortcuts sends the message in different shapes (plain text, a form, or JSON where the message may itself be an object):
+ // the raw body is read once, and the longest piece of text in it is the message.
+ let raw='';try{raw=await req.text();}catch{}
+ const strings=(v:unknown):string[]=>typeof v==='string'?[v]:Array.isArray(v)?v.flatMap(strings):v&&typeof v==='object'?Object.values(v).flatMap(strings):[];
+ let text=raw;const type=req.headers.get('content-type')||'';let shape='text';
+ try{if(/^\s*[{\[]/.test(raw)){text=strings(JSON.parse(raw)).sort((a,b)=>b.length-a.length)[0]||'';shape='json';}
+  else if(type.includes('x-www-form-urlencoded')){text=[...new URLSearchParams(raw).values()].sort((a,b)=>b.length-a.length)[0]||'';shape='form';}
+  else if(type.includes('multipart/form-data')){text=(raw.match(/\r?\n\r?\n([\s\S]*?)\r?\n--/g)||[]).map(x=>x.replace(/^\r?\n\r?\n|\r?\n--$/g,'')).sort((a,b)=>b.length-a.length)[0]||'';shape='multipart';}}catch{}
  text=text.trim().slice(0,1500);const s=parseTicketSms(text);
  const {sql,ready}=db();await ready;
  await sql`insert into gate_meta(k,v) values(${'smsin:'+user+':'+(text.length<8?'empty':s?'ticket':'other')},now()) on conflict(k) do update set v=now()`;
+ // What reached us, without the content: its shape and length (to tell an empty Shortcut variable from a message without a link).
+ await sql`insert into gate_meta(k,v) values(${'smsdbg:'+user+':'+shape+':'+raw.length+':'+text.length},now()) on conflict(k) do update set v=now()`;
  if(!s)return Response.json({ok:true,ticket:false});
  const recent=await sql`select count(*)::int as n from gate_sms where user_id=${user} and created_at>now()-interval '1 hour'`;if(Number(recent[0].n)>40)return Response.json({ok:false,error:'too many'},{status:429});
  let file:{id:string;name:string;type:string;size:number}|null=null;
