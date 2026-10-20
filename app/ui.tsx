@@ -90,15 +90,16 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
    const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json().catch(()=>({error:'הסריקה לא הושלמה. נסה שוב.'}));if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
    const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));let cur=base;setProg([0,todo.length]);
    const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=4)o.push(l.slice(i,i+4));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
-   const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b,last:second})});const d=await res.json().catch(()=>null);
+   const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){// A dropped connection (the phone locked, or the app went to the background: Safari says "Load failed") puts this batch back for the second round.
+const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b,last:second})}).catch(()=>null);const d=res?await res.json().catch(()=>null):null;
      // A batch that timed out (no JSON back) is read again in the second round instead of stopping the whole scan.
-     if(!res.ok||!d){if(d&&(res.status===401||res.status===403))throw new Error(d.error);if(!second)retryIds.push(...b);done+=b.length;if(!second)setProg([done,todo.length]);continue;}
+     if(!res||!res.ok||!d){if(res&&d&&(res.status===401||res.status===403))throw new Error(d.error);if(!second)retryIds.push(...b);done+=b.length;if(!second)setProg([done,todo.length]);continue;}
      cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)setProg([done,todo.length]);}second=true;};
    await worker();
    // Mail Gemini could not read yet (busy) is tried again once after a short pause.
    if(retryIds.length){await new Promise(r=>setTimeout(r,25000));batches.push(...chunk(retryIds.splice(0)));await worker();}
    cur={...cur,updated:new Date().toISOString()};setStore(cur);save(KEY(user.id),cur);
-  }catch(e){setErr(e instanceof Error?e.message:'הסריקה נכשלה');}
+  }catch(e){const m=e instanceof Error?e.message:'';setErr(/load failed|failed to fetch|network/i.test(m)||!m?'החיבור נקטע באמצע הסריקה. נסה שוב.':m);}
   finally{running.current=false;setBusy(false);setProg(null);}},[user]);
  useEffect(()=>{if(ready&&gmail&&user?.id!=='demo')scan();},[ready,gmail,scan,user]);
  // Opening screen, like Unbox: the G draws itself, then fades into the app.
@@ -142,7 +143,21 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  // "שאל את Unstage": questions about your own events, answered by Gemini from the list on the phone.
  const [askOpen,setAskOpen]=useState(false);const [askDraft,setAskDraft]=useState('');const [chat,setChat]=useState<{role:'user'|'model';text:string}[]>([]);const [asking,setAsking]=useState(false);
  const [canListen,setCanListen]=useState(false);useEffect(()=>{const w=window as unknown as {webkitSpeechRecognition?:unknown;SpeechRecognition?:unknown};setCanListen(!!(w.webkitSpeechRecognition||w.SpeechRecognition));},[]);
- const listen=(done:(t:string)=>void)=>{const W=window as unknown as {webkitSpeechRecognition?:new()=>any;SpeechRecognition?:new()=>any};const R=W.SpeechRecognition||W.webkitSpeechRecognition;if(!R)return;const r=new R();r.lang='he-IL';r.onresult=(ev:any)=>{const t=String(ev.results?.[0]?.[0]?.transcript||'');if(t)done(t);};r.start();};
+ // Back in the app after the connection dropped mid-scan: carry on by itself (what was read is kept).
+ useEffect(()=>{if(!err.startsWith('החיבור נקטע'))return;const on=()=>{if(document.visibilityState==='visible')void scan();};document.addEventListener('visibilitychange',on);return()=>document.removeEventListener('visibilitychange',on);},[err,scan]);
+ // Voice, as in Unbox: the mic lights while listening, a second tap stops it, it stops by itself after 10 seconds (iOS sometimes never ends it).
+ const recRef=useRef<any>(null);const [listening,setListening]=useState(false);const [heard,setHeard]=useState('');
+ const listen=(done:(t:string)=>void)=>{const W=window as unknown as {webkitSpeechRecognition?:new()=>any;SpeechRecognition?:new()=>any};const R=W.SpeechRecognition||W.webkitSpeechRecognition;if(!R)return;
+  if(listening){try{recRef.current?.abort();}catch{}recRef.current=null;setListening(false);return;}
+  const r=new R();recRef.current=r;setTimeout(()=>{if(recRef.current===r){try{r.abort();}catch{}recRef.current=null;setListening(false);}},10000);r.lang='he-IL';r.interimResults=false;r.maxAlternatives=1;setListening(true);setHeard('');
+  r.onresult=(ev:any)=>{const t=String(ev.results?.[0]?.[0]?.transcript||'');if(t)done(t);};
+  r.onerror=(ev:any)=>{if(recRef.current!==r)return;recRef.current=null;setListening(false);if(ev?.error!=='aborted')setHeard('לא שמעתי. נסה שוב.');};r.onend=()=>{if(recRef.current===r)recRef.current=null;setListening(false);};try{r.start();}catch{setListening(false);}};
+ // "מתי טארה סטרונג?" / "איפה ההופעה של שלמה ארצי": searches, and answers out loud on screen with the date, time and place.
+ const voiceSearch=(said:string)=>{const term=said.replace(/[?؟.!]/g,' ').replace(/^\s*(?:מתי|איפה|מה עם|מה השעה של|באיזו שעה|תגיד(?: לי)? (?:מתי|איפה))\s+/,'').replace(/^(?:ה)?(?:הופעה|הצגה|סרט|הרצאה|אירוע|משחק)(?:\s+של)?\s+/,'').trim();
+  if(term.replace(/\s/g,'').length<2||/^(?:נו|אה+|אמ+|כן|לא|אוקיי?|רגע|טוב|יאללה|שלום|היי)$/.test(term)){setHeard('לא הבנתי. נסה לומר שם של אירוע, למשל "מתי טארה סטרונג".');return;}
+  setQ(term);const k=term.toLowerCase();const hits=named.filter(t=>!hidden.includes(t.key)&&[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(k))).sort((a,b)=>Math.abs(when(a).getTime()-Date.now())-Math.abs(when(b).getTime()-Date.now()));
+  const say=(t:Ticket)=>t.title+(t.cancelled?' - בוטל':' - '+longDate(t)+(timed(t)?' בשעה '+time(t):'')+(place(t)?', ב'+place(t).replace(/^ב/,''):''));
+  setHeard(!hits.length?'לא מצאתי אירוע בשם '+term:hits.length===1?say(hits[0]):'מצאתי '+hits.length+'. '+hits.slice(0,2).map(say).join('. '));};
  async function ask(text?:string){const q=(text??askDraft).trim();if(!q||asking)return;setAskDraft('');const hist=chat;setChat([...hist,{role:'user',text:q}]);setAsking(true);
   const data=named.filter(t=>!hidden.includes(t.key)).map(t=>[t.title,KIND[t.kind].label,t.start.replace('T',' '),[t.venue,t.city].filter(Boolean).join(', '),t.seats.length?'מקומות: '+t.seats.join('; '):'',t.doors?'דלתות '+t.doors:'',t.price?'שולם '+t.price:'',t.cancelled?'בוטל':''].filter(Boolean).join(' | ')).join('\n');
   try{const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,data,history:hist})});const d=await r.json();
@@ -183,7 +198,8 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   {err&&<div className="error" role="alert"><span>{err}</span><button className="ghost" onClick={()=>scan()}>נסה שוב</button></div>}
   {(tab===0||tab===1)&&<>
    {busy&&!store.tickets.length?<div className="loader" role="status"><Mark cls="lmark" anim="bob"/><p>{prog&&prog[1]?'מביא את הכרטיסים שלך…':'בודק את Gmail…'}</p></div>:<>
-   {tab===0&&<label className="search"><Search size={20}/><input aria-label="חיפוש אירועים" placeholder="חיפוש אירוע, מקום או מוכר" value={q} onChange={e=>setQ(e.target.value)}/><button type="button" className="micBtn askBtn" aria-label="שאל את Unstage" onClick={()=>setAskOpen(true)}><Sparkles size={20}/></button>{canListen&&<button type="button" className="micBtn" aria-label="חיפוש בקול" onClick={()=>listen(setQ)}><Mic size={20}/></button>}</label>}
+   {tab===0&&<label className="search"><Search size={20}/><input aria-label="חיפוש אירועים" placeholder="חיפוש אירוע" value={q} onChange={e=>{setQ(e.target.value);setHeard('');}}/><button type="button" className="micBtn askBtn" aria-label="שאל את Unstage" onClick={()=>setAskOpen(true)}><Sparkles size={20}/></button>{canListen&&<button type="button" className={'micBtn'+(listening?' on':'')} aria-label={listening?'מקשיב, דבר עכשיו':'חיפוש בקול: שאל מתי אירוע'} onClick={()=>listen(voiceSearch)}><Mic size={20}/></button>}</label>}
+   {tab===0&&heard&&<p className="voiceAnswer" role="status" aria-live="assertive">{heard}</p>}
    {(()=>{const rows=tab===1?week:list;const showHero=tab===0&&filt==='next'&&hero&&!q;const rest=showHero?rows.filter(t=>t.key!==hero.key):rows;
     return <>{showHero&&<Hero t={hero} press={longPress(hero)}/>}
      {showHero&&rest.length>0&&<h3 className="listH">בהמשך</h3>}
