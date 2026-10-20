@@ -328,7 +328,7 @@ function Sheet({t,me,onClose,onRename,onHide,onCopy}:{t:Ticket;me:string;onClose
    {t.doors&&<div className="kv"><span>פתיחת דלתות</span><b style={{color:'var(--ink)'}}><DoorOpen size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.doors}</b></div>}</div>}
   {upcoming(t)&&!t.cancelled&&<CancelBox t={t}/>}
   <div className="sheetActions">
-   {upcoming(t)&&!t.cancelled&&(t.files.length>0||t.links.length>0)&&<button className="ghost" onClick={()=>setGift(true)}><Send size={19}/>{nTickets(t)>1?'שלח כרטיסים למישהו':'שלח כרטיס למישהו'}</button>}
+   {upcoming(t)&&!t.cancelled&&(t.files.length>0||t.links.length>0)&&<button className="ghost" onClick={()=>setGift(true)}><Send size={19}/>שלח כרטיס למישהו</button>}
    {upcoming(t)&&!t.cancelled&&<button className="primary" onClick={()=>addToCalendar(t)}><CalendarPlus size={20}/>הוספה ליומן עם תזכורת</button>}
    <a className="ghost" href={'https://mail.google.com/mail/u/0/#all/'+t.thread} target="_blank" rel="noopener"><Mail size={19}/>פתיחת המייל</a></div>
   <button className="textBtn" onClick={onHide}><EyeOff size={16} style={{verticalAlign:-3,marginLeft:6}}/>זה לא כרטיס - הסתר</button>
