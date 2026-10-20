@@ -81,26 +81,28 @@ function GoogleButton({label,disabled}:{label:string;disabled?:boolean}){return 
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
  const [tab,setTab]=useState(0);const [filt,setFilt]=useState<'next'|'past'|'cx'>('next');const [menu,setMenu]=useState<Ticket|null>(null);const [menuView,setMenuView]=useState<TFile[]|null>(null);const press=useRef<{t?:ReturnType<typeof setTimeout>;fired:boolean}>({fired:false});const slide=useRowSlide();const [names,setNames]=useState<Record<string,string>>({});const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
- const [busy,setBusy]=useState(false);const [prog,setProg]=useState<[number,number]|null>(null);const [err,setErr]=useState('');const [toast,setToast]=useState('');
+ const [busy,setBusy]=useState(false);const [prog,setProg]=useState<{pct:number;label:string}|null>(null);const [err,setErr]=useState('');const [toast,setToast]=useState('');
  const running=useRef(false);
  useEffect(()=>{if(!user)return;if(user.id==='demo'){import('@/lib/demo').then(d=>{setStore(d.demo());setReady(true);});return;}setStore(load(KEY(user.id),{tickets:[],read:[],updated:''}));setHidden(load(HID(user.id),[]));setNames(load(NAM(user.id),{}));setSize(load('unstage:size',0));setReady(true);},[user]);
  const say=(s:string)=>{setToast(s);setTimeout(()=>setToast(''),2200);};
- const scan=useCallback(async(fresh=false)=>{if(!user||running.current)return;running.current=true;setBusy(true);setErr('');
+ const scan=useCallback(async(fresh=false)=>{if(!user||running.current)return;running.current=true;setBusy(true);setErr('');setProg({pct:3,label:'מתחבר ל־Gmail…'});
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
    const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json().catch(()=>({error:'הסריקה לא הושלמה. נסה שוב.'}));if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
-   const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));let cur=base;setProg([0,todo.length]);
+   const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));let cur=base;
+   // As in Unbox: "נקראו 12 מתוך 40 מיילים חדשים", then "משלים 5 מיילים שלא נקראו…".
+   const step=(done:number)=>setProg({pct:todo.length?Math.min(90,Math.round(5+85*done/todo.length)):90,label:todo.length?'נקראו '+done+' מתוך '+todo.length+' מיילים חדשים':'אין מיילים חדשים'});step(0);
    const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=4)o.push(l.slice(i,i+4));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
    const worker=async()=>{for(let b=batches.shift();b;b=batches.shift()){// A dropped connection (the phone locked, or the app went to the background: Safari says "Load failed") puts this batch back for the second round.
 const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b,last:second})}).catch(()=>null);const d=res?await res.json().catch(()=>null):null;
      // A batch that timed out (no JSON back) is read again in the second round instead of stopping the whole scan.
-     if(!res||!res.ok||!d){if(res&&d&&(res.status===401||res.status===403))throw new Error(d.error);if(!second)retryIds.push(...b);done+=b.length;if(!second)setProg([done,todo.length]);continue;}
-     cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)setProg([done,todo.length]);}second=true;};
+     if(!res||!res.ok||!d){if(res&&d&&(res.status===401||res.status===403))throw new Error(d.error);if(!second)retryIds.push(...b);done+=b.length;if(!second)step(done);continue;}
+     cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)step(done);}second=true;};
    await worker();
    // Mail Gemini could not read yet (busy) is tried again once after a short pause.
-   if(retryIds.length){await new Promise(r=>setTimeout(r,25000));batches.push(...chunk(retryIds.splice(0)));await worker();}
-   cur={...cur,updated:new Date().toISOString()};setStore(cur);save(KEY(user.id),cur);
+   if(retryIds.length){setProg({pct:92,label:'משלים '+retryIds.length+' מיילים שלא נקראו…'});await new Promise(r=>setTimeout(r,25000));batches.push(...chunk(retryIds.splice(0)));await worker();}
+   cur={...cur,updated:new Date().toISOString()};setStore(cur);save(KEY(user.id),cur);setProg({pct:100,label:'הסריקה הושלמה'});
   }catch(e){const m=e instanceof Error?e.message:'';setErr(/load failed|failed to fetch|network/i.test(m)||!m?'החיבור נקטע באמצע הסריקה. נסה שוב.':m);}
-  finally{running.current=false;setBusy(false);setProg(null);}},[user]);
+  finally{running.current=false;setBusy(false);setTimeout(()=>setProg(null),700);}},[user]);
  useEffect(()=>{if(ready&&gmail&&user?.id!=='demo')scan();},[ready,gmail,scan,user]);
  // Opening screen, like Unbox: the G draws itself, then fades into the app.
  const [splash,setSplash]=useState<'on'|'out'|'off'>('on');
@@ -183,8 +185,8 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  const ago=(iso:string)=>{const m=Math.round((Date.now()-new Date(iso).getTime())/6e4);return m<1?'עודכן עכשיו':m<60?'עודכן לפני '+m+' דק׳':m<1440?'עודכן לפני '+Math.round(m/60)+' שע׳':'עודכן '+new Date(iso).toLocaleDateString('he-IL',{day:'numeric',month:'numeric'});};
  const title=tab===3?'הגדרות':tab===2?'סיכום':tab===1?'השבוע':filt==='past'?'היו':filt==='cx'?'בוטלו':'האירועים שלי';
  const top=(acts:React.ReactNode)=><header className="top"><div className="row"><span className="brand" dir="ltr" aria-label="Unstage"><Logo/><span aria-hidden="true">nstage</span></span><div className="actions">{acts}</div></div><h1>{title}</h1>
-  {user&&tab!==3&&prog&&prog[1]>0&&busy&&<div className="progress"><div className="pbar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(prog[0]/prog[1]*100)} aria-label="התקדמות הסריקה"><i style={{width:Math.round(prog[0]/prog[1]*100)+'%'}}/></div><div className="plabel" aria-live="polite"><span>קורא מיילי כרטיסים</span><b>{Math.round(prog[0]/prog[1]*100)}%</b></div></div>}
-  {user&&tab!==3&&!(prog&&prog[1]>0&&busy)&&<p className="sub" role="status">{busy?'בודק את Gmail…':err?'הסריקה לא הושלמה':store.updated?ago(store.updated):'ממתין לסריקה'}</p>}</header>;
+  {user&&tab!==3&&prog&&busy&&<div className="progress"><div className="pbar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={prog.pct} aria-label="התקדמות הסריקה"><i style={{width:prog.pct+'%'}}/></div><div className="plabel" aria-live="polite"><span>{prog.label}</span><b>{prog.pct}%</b></div></div>}
+  {user&&tab!==3&&!(prog&&busy)&&<p className="sub" role="status">{busy?'בודק את Gmail…':err?'הסריקה לא הושלמה':store.updated?ago(store.updated):'ממתין לסריקה'}</p>}</header>;
  if(!configured||!user)return <main className="app">{splashEl}{top(null)}
   <section className="panel empty"><TicketIcon size={44}/><h2>כל הכרטיסים שלך במקום אחד</h2><p>{configured?'התחבר עם Google כדי לאסוף את מיילי הכרטיסים מ-Gmail - הופעות, הצגות, סרטים והרצאות.':'חסרים מפתחות בשרת (AUTH_GOOGLE_SECRET, AUTH_SECRET).'}</p><form action={login}><GoogleButton label="התחבר עם Google" disabled={!configured}/></form></section>
   <p className="footnote">קריאה בלבד מ-Gmail. תוכן המיילים לא נשמר.</p></main>;
@@ -197,7 +199,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   {!gmail&&<div className="error"><span>נכנסת עם Google, אבל לא אישרת קריאת Gmail.</span><form action={login}><button className="primary">חידוש הרשאת Google</button></form></div>}
   {err&&<div className="error" role="alert"><span>{err}</span><button className="ghost" onClick={()=>scan()}>נסה שוב</button></div>}
   {(tab===0||tab===1)&&<>
-   {busy&&!store.tickets.length?<div className="loader" role="status"><Mark cls="lmark" anim="bob"/><p>{prog&&prog[1]?'מביא את הכרטיסים שלך…':'בודק את Gmail…'}</p></div>:<>
+   {busy&&!store.tickets.length?<div className="loader" role="status"><Mark cls="lmark" anim="bob"/><p>{prog&&prog.pct>4?'מביא את הכרטיסים שלך…':'בודק את Gmail…'}</p></div>:<>
    {tab===0&&<label className="search"><Search size={20}/><input aria-label="חיפוש אירועים" placeholder="חיפוש אירוע" value={q} onChange={e=>{setQ(e.target.value);setHeard('');}}/><button type="button" className="micBtn askBtn" aria-label="שאל את Unstage" onClick={()=>setAskOpen(true)}><Sparkles size={20}/></button>{canListen&&<button type="button" className={'micBtn'+(listening?' on':'')} aria-label={listening?'מקשיב, דבר עכשיו':'חיפוש בקול: שאל מתי אירוע'} onClick={()=>listen(voiceSearch)}><Mic size={20}/></button>}</label>}
    {tab===0&&heard&&<p className="voiceAnswer" role="status" aria-live="assertive">{heard}</p>}
    {(()=>{const rows=tab===1?week:list;const showHero=tab===0&&filt==='next'&&hero&&!q;const rest=showHero?rows.filter(t=>t.key!==hero.key):rows;
