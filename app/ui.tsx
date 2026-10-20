@@ -5,6 +5,7 @@ import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapP
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
 import {mergeAll,status,cleanSeats,current,withSms} from '@/lib/combine';
 import type {PresInfo} from '@/lib/pres';
+import {localAnswer} from '@/lib/answer';
 import {sellerCancel,contacts,LAW} from '@/lib/sellers';
 import {navQuery,navLinks} from '@/lib/place';
 import {offlinePlan,personalKeys} from '@/lib/offline';
@@ -221,7 +222,10 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  async function ask(text?:string){const q=(text??askDraft).trim();if(!q||asking)return;setAskDraft('');const hist=chat;setChat([...hist,{role:'user',text:q}]);setAsking(true);
   const data=named.filter(t=>!hidden.includes(t.key)).map(t=>[t.title,KIND[t.kind].label,t.start.replace('T',' '),[t.venue,t.city].filter(Boolean).join(', '),t.seats.length?'מקומות: '+t.seats.join('; '):'',t.doors?'דלתות '+t.doors:'',t.price?'שולם '+t.price:'',t.cancelled?'בוטל':''].filter(Boolean).join(' | ')).join('\n');
   try{const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,data,history:hist})});const d=await r.json();
-   setChat(c=>[...c,{role:'model',text:d.answer||(d.error==='busy'?'אני עמוס כרגע, נסה שוב בעוד דקה.':'לא הצלחתי לענות כרגע.')}]);}catch{setChat(c=>[...c,{role:'model',text:'לא הצלחתי לענות כרגע.'}]);}finally{setAsking(false);}}
+   // Gemini busy or unavailable: the usual questions (seats, time, place) are answered from the events on the phone.
+   const local=()=>localAnswer(q,named.filter(t=>!hidden.includes(t.key)));
+   setChat(c=>[...c,{role:'model',text:d.answer||local()||(d.error==='busy'?'אני עמוס כרגע, נסה שוב בעוד דקה.':'לא הצלחתי לענות כרגע. אפשר לשאול על מקומות, שעה או מקום של אירוע.')}]);}
+  catch{setChat(c=>[...c,{role:'model',text:localAnswer(q,named.filter(t=>!hidden.includes(t.key)))||'לא הצלחתי לענות כרגע.'}]);}finally{setAsking(false);}}
  const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Unstage</div></div>;
  // Replaced tickets (a newer one came for the same order) are never shown.
  const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t),seats:cleanSeats(t.seats),venue:fullVenue(t),kind:fixKind(t.kind==='sport'&&/מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית)\)/.test(t.title)?'movie':t.kind,t.seller,t.title),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{})})),[store.tickets,names,mycx]);
