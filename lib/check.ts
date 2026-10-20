@@ -1,6 +1,8 @@
 // One user's background round (from the schedule): new ticket mail in the last days, then reminders.
 import {QUERY,gmailClient,type Message} from '@/lib/gmail';
 import {readTicket,mergeTickets,type Ticket} from '@/lib/tickets';
+import {sameEvent} from '@/lib/combine';
+import {changeNotes} from '@/lib/changes';
 import {reminders,mark,newTicket,type Sent,type Note} from '@/lib/notify';
 import {unseal,send,type Sub} from '@/lib/push';
 import {freshAccess} from '@/lib/identity';
@@ -12,10 +14,12 @@ export async function check(u:Row,sql:Sql){let tickets=u.tickets||[];let sent=u.
   const fresh=((list.messages||[]) as {id:string}[]).map(m=>m.id).filter(id=>!seen.has(id)).slice(0,8);
   for(const id of fresh){const m=await gmail('messages/'+encodeURIComponent(id)+'?format=full') as Message;const r=await readTicket(m).catch(()=>({ticket:null,retry:true}));
    if(r.retry)continue;seen.add(id);if(!r.ticket)continue;
-   const known=tickets.some(t=>t.key===r.ticket!.key||t.msgs.some(x=>r.ticket!.msgs.includes(x)));tickets=mergeTickets([...tickets,r.ticket]);
-   if(!known&&!r.ticket.cancelled&&!u.hidden?.includes(r.ticket.key))notes.push(newTicket(r.ticket));
-   // A cancellation mail for an event already on the list: say so (the whole event, or one of its orders).
-   if(r.ticket.cancelled){const ev=tickets.find(t=>t.msgs.includes(id));if(ev&&ev.start&&!u.hidden?.includes(ev.key))notes.push({key:ev.key,tag:'cx:'+ev.key+':'+id,title:(ev.cancelled?'בוטל: ':'הזמנה בוטלה: ')+ev.title,body:ev.cancelled?'האירוע הוסר מהקרובים ומהיומן':'שאר הכרטיסים לאירוע בתוקף',url:'/?t='+encodeURIComponent(ev.key)});}}
+   const before=tickets.find(t=>sameEvent(t,r.ticket!));tickets=mergeTickets([...tickets,r.ticket]);const after=tickets.find(t=>t.msgs.includes(id));
+   if(!before){if(!r.ticket.cancelled&&!u.hidden?.includes(r.ticket.key))notes.push(newTicket(r.ticket));continue;}
+   // A known event that this mail changes. Time and place changes are told only when the mail says it is a change or Gemini read it;
+   // cancelling, restoring and replacing need the mail's own words (lib/tickets signals), so a stray reading never sends a false alarm.
+   if(!after||u.hidden?.includes(after.key))continue;const trusted=r.ticket.update||r.ticket.ai||r.ticket.cancelled||r.ticket.restored;
+   const ch=changeNotes(before,after,!!trusted,sent);notes.push(...ch.notes);sent=ch.sent;}
  }catch{gmailOk=false;}}
  notes.push(...reminders(tickets,sent,u.hidden||[]));
  let ok=0;const dead=new Set<string>();

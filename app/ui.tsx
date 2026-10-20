@@ -3,9 +3,10 @@ import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
 import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,Bus,DoorOpen,LogOut,RotateCcw,Users} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
-import {mergeAll,status,cleanSeats} from '@/lib/combine';
+import {mergeAll,status,cleanSeats,current} from '@/lib/combine';
 import {sellerCancel,contacts,LAW} from '@/lib/sellers';
 import {navQuery,navLinks} from '@/lib/place';
+import {offlinePlan,personalKeys} from '@/lib/offline';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
 const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},other:{label:'אירוע',Icon:TicketIcon}};
@@ -107,7 +108,12 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    cur={...cur,updated:new Date().toISOString()};setStore(cur);save(KEY(user.id),cur);setProg({pct:100,label:'הסריקה הושלמה'});
   }catch(e){const m=e instanceof Error?e.message:'';setErr(/load failed|failed to fetch|network/i.test(m)||!m?'החיבור נקטע באמצע הסריקה. נסה שוב.':m);}
   finally{running.current=false;setBusy(false);setTimeout(()=>setProg(null),700);}},[user]);
- useEffect(()=>{if(ready&&gmail&&user?.id!=='demo')scan();},[ready,gmail,scan,user]);
+ // Offline: no scan (it would only fail); the tickets on the phone show as they are, and the scan runs when the connection is back.
+ const [online,setOnline]=useState(true);
+ useEffect(()=>{setOnline(navigator.onLine);const on=()=>{setOnline(true);if(gmail&&user?.id!=='demo')void scan();};const off=()=>setOnline(false);addEventListener('online',on);addEventListener('offline',off);return()=>{removeEventListener('online',on);removeEventListener('offline',off);};},[gmail,user,scan]);
+ // The service worker keeps the app and the ticket files for offline use (public/sw.js); it is registered on every open, not only for notifications.
+ useEffect(()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});},[]);
+ useEffect(()=>{if(ready&&gmail&&user?.id!=='demo'&&navigator.onLine)scan();},[ready,gmail,scan,user]);
  // Opening screen, like Unbox: the G draws itself, then fades into the app.
  const [splash,setSplash]=useState<'on'|'out'|'off'>('on');
  useEffect(()=>{const a=setTimeout(()=>setSplash('out'),1500),b=setTimeout(()=>setSplash('off'),1900);return()=>{clearTimeout(a);clearTimeout(b);};},[]);
@@ -185,7 +191,8 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   try{const r=await fetch('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,data,history:hist})});const d=await r.json();
    setChat(c=>[...c,{role:'model',text:d.answer||(d.error==='busy'?'אני עמוס כרגע, נסה שוב בעוד דקה.':'לא הצלחתי לענות כרגע.')}]);}catch{setChat(c=>[...c,{role:'model',text:'לא הצלחתי לענות כרגע.'}]);}finally{setAsking(false);}}
  const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Unstage</div></div>;
- const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,seats:cleanSeats(t.seats),...(names[t.key]?{title:names[t.key]}:{})})),[store.tickets,names]);
+ // Replaced tickets (a newer one came for the same order) are never shown.
+ const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t),seats:cleanSeats(t.seats),...(names[t.key]?{title:names[t.key]}:{})})),[store.tickets,names]);
  const visible=useMemo(()=>{const s=q.trim().toLowerCase();return named.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[named,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)&&!t.cancelled).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
  const past=useMemo(()=>visible.filter(t=>!upcoming(t)&&!t.cancelled).sort((a,b)=>when(b).getTime()-when(a).getTime()),[visible]);
@@ -194,6 +201,18 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  const hero=next[0];
  useEffect(()=>{if(filt==='cx'&&!cxl.length)setFilt('next');},[filt,cxl.length]);
  const sel=named.find(t=>t.key===open);
+ // Before the event: the tickets of the next two weeks are fetched onto the phone ahead (while signed in and online), so they open at the door
+ // with no signal. Files of events more than two days past are removed from the phone. saved = events whose tickets are all on the phone.
+ const [saved,setSaved]=useState<Set<string>>(()=>new Set());
+ useEffect(()=>{if(!user||user.id==='demo'||!('caches' in window))return;let off=false;
+  const plan=offlinePlan(store.tickets.filter(t=>!hidden.includes(t.key)));
+  void (async()=>{try{const c=await caches.open(TICKET_CACHE);
+   if(online&&!busy)for(const f of plan.fetch){const u=fileUrl(f);if(!(await c.match(u)))await bytes(u).catch(()=>{});}
+   await new Promise(r=>setTimeout(r,400));
+   const want=new Set(plan.keep.map(f=>new URL(fileUrl(f),location.origin).href));
+   if(!busy)for(const req of await c.keys())if(!want.has(req.url))await c.delete(req);
+   const ok=new Set<string>();for(const e of plan.events){let all=true;for(const f of e.files)if(!(await c.match(fileUrl(f)))){all=false;break;}if(all)ok.add(e.key);}
+   if(!off)setSaved(ok);}catch{}})();return()=>{off=true;};},[user,store.tickets,hidden,online,busy]);
  useEffect(()=>{const back=()=>setOpen(null);if(open){history.pushState({sheet:1},'');addEventListener('popstate',back);return ()=>removeEventListener('popstate',back);}},[open]);
  const close=()=>{if(history.state?.sheet)history.back();else setOpen(null);};
  const rename=(k:string)=>{if(!user)return;const cur=names[k]||store.tickets.find(t=>t.key===k)?.title||'';const v=prompt('שם לאירוע',cur);if(v===null)return;const n={...names};if(v.trim()&&v.trim()!==store.tickets.find(t=>t.key===k)?.title)n[k]=v.trim().slice(0,120);else delete n[k];setNames(n);save(NAM(user.id),n);say('השם עודכן');};
@@ -206,7 +225,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  const title=tab===3?'הגדרות':tab===2?'סיכום':tab===1?'השבוע':filt==='past'?'היו':filt==='cx'?'בוטלו':'האירועים שלי';
  const top=(acts:React.ReactNode)=><header className="top"><div className="row"><span className="brand" dir="ltr" aria-label="Unstage"><Logo/><span aria-hidden="true">nstage</span></span><div className="actions">{acts}</div></div><h1>{title}</h1>
   {user&&tab!==3&&prog&&busy&&<div className="progress"><div className="pbar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={prog.pct} aria-label="התקדמות הסריקה"><i style={{width:prog.pct+'%'}}/></div><div className="plabel" aria-live="polite"><span>{prog.label}</span><b>{prog.pct}%</b></div></div>}
-  {user&&tab!==3&&!(prog&&busy)&&<p className="sub" role="status">{busy?'בודק את Gmail…':err?'הסריקה לא הושלמה':store.updated?ago(store.updated):'ממתין לסריקה'}</p>}</header>;
+  {user&&tab!==3&&!(prog&&busy)&&<p className="sub" role="status">{!online?'מצב לא מקוון'+(store.updated?' · עודכן לאחרונה: '+ago(store.updated).replace(/^עודכן /,''):''):busy?'בודק את Gmail…':err?'הסריקה לא הושלמה':store.updated?ago(store.updated):'ממתין לסריקה'}</p>}</header>;
  if(!configured||!user)return <main className="app">{splashEl}{top(null)}
   <section className="panel empty"><TicketIcon size={44}/><h2>כל הכרטיסים שלך במקום אחד</h2><p>{configured?'התחבר עם Google כדי לאסוף את מיילי הכרטיסים מ-Gmail - הופעות, הצגות, סרטים והרצאות.':'חסרים מפתחות בשרת (AUTH_GOOGLE_SECRET, AUTH_SECRET).'}</p><form action={login}><GoogleButton label="התחבר עם Google" disabled={!configured}/></form></section>
   <p className="footnote">קריאה בלבד מ-Gmail. תוכן המיילים לא נשמר.</p></main>;
@@ -230,7 +249,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   </>}
   {tab===2&&<Summary list={visible}/>}
   {tab===3&&<SettingsView size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
-  {sel&&<Sheet t={sel} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
+  {sel&&<Sheet t={sel} saved={saved.has(sel.key)} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onCopy={()=>say('הועתק')}/>}
   {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
    <div className="askHead"><h3><Sparkles size={19}/>שאל את Unstage</h3><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
    <div className="askList" aria-live="polite">{!chat.length&&<div className="askHints">{['מה האירוע הבא שלי?','כמה הוצאתי על כרטיסים השנה?','באיזה שורה אני יושב בהופעה הבאה?','מה יש לי החודש?'].map(h=><button key={h} onClick={()=>ask(h)}>{h}</button>)}</div>}
@@ -304,7 +323,7 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
-function Sheet({t,me,onClose,onRename,onHide,onCopy}:{t:Ticket;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,saved,me,onClose,onRename,onHide,onCopy}:{t:Ticket;saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
@@ -326,6 +345,7 @@ function Sheet({t,me,onClose,onRename,onHide,onCopy}:{t:Ticket;me:string;onClose
    {t.count&&<div className="kv"><span>{t.count===1?'כרטיס':'כרטיסים'}</span><b style={{color:'var(--ink)'}}><Users size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.count}</b></div>}
    {t.price&&<div className="kv"><span>שולם</span><b style={{color:'var(--ink)'}} dir="ltr">{t.price}</b></div>}
    {t.doors&&<div className="kv"><span>פתיחת דלתות</span><b style={{color:'var(--ink)'}}><DoorOpen size={16} style={{verticalAlign:-3,marginLeft:5}}/>{t.doors}</b></div>}</div>}
+  {upcoming(t)&&!t.cancelled&&t.files.some(f=>!/pkpass/i.test(f.type+f.name))&&<p className={'offNote'+(saved?' ok':'')} role="status">{saved?'✓ הכרטיס שמור במכשיר, וזמין גם בלי אינטרנט.':'כדאי לפתוח את הכרטיס עכשיו כדי שיהיה זמין גם בלי אינטרנט.'}</p>}
   {upcoming(t)&&!t.cancelled&&<CancelBox t={t}/>}
   <div className="sheetActions">
    {upcoming(t)&&!t.cancelled&&(t.files.length>0||t.links.length>0)&&<button className="ghost" onClick={()=>setGift(true)}><Send size={19}/>שלח כרטיס למישהו</button>}
@@ -368,7 +388,7 @@ function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,on
    <ol className="steps2"><li>העתק את הקישור האישי.</li><li>באפליקציית קיצורים: <b>+</b> ← הוסף פעולה <b>קבל תוכן של URL</b> והדבק את הקישור.</li><li>הוסף פעולה <b>דבר טקסט</b>.</li><li>שמור את הקיצור בשם <b>מה האירוע הבא שלי</b>.</li></ol>
    <button className="ghost" onClick={()=>onCopy(speakUrl)}><Copy size={18}/>העתקת הקישור האישי</button>
    <button className="ghost" onClick={async()=>{try{const t=await (await fetch(speakUrl,{cache:'no-store'})).text();const u=new SpeechSynthesisUtterance(t);u.lang='he-IL';speechSynthesis.cancel();speechSynthesis.speak(u);}catch{}}}><Volume2 size={18}/>השמע עכשיו</button></div>}
-  <div className="set"><h3><Mail size={18}/>חשבון</h3><p className="setNote"><b>{user.name}</b><br/><span dir="ltr">{user.email}</span></p><button className="ghost" onClick={()=>signOut({redirectTo:'/'})}><LogOut size={18}/>יציאה</button></div>
+  <div className="set"><h3><Mail size={18}/>חשבון</h3><p className="setNote"><b>{user.name}</b><br/><span dir="ltr">{user.email}</span></p><button className="ghost" onClick={()=>void clearDevice().finally(()=>signOut({redirectTo:'/'}))}><LogOut size={18}/>יציאה</button></div>
   <div className="set"><h3><RefreshCw size={18}/>סריקה</h3><p className="setNote">Unstage קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
    {hiddenCount>0&&<button className="ghost" onClick={onRestore}><EyeOff size={18}/>החזרת {hiddenCount} אירועים מוסתרים</button>}</div>
   <p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. רשימת האירועים נשמרת בטלפון, ועותק שלה בשרת בשביל התזכורות, היומן והווידג'ט. קובצי הכרטיס נפתחים ישירות מהמייל שלך. <a href="/privacy">פרטיות</a></p></div></>;}
@@ -392,7 +412,13 @@ function Summary({list}:{list:Ticket[]}){const slide=useRowSlide();const y=new D
 // pdf.js is served from this site (public/pdfjs, the legacy build for older Safari) and loaded ahead when an event opens.
 // Ticket files fetched once per session, and ahead of time for the next event, so "הצג כרטיס" opens at once.
 const BYTES=new Map<string,Promise<ArrayBuffer>>();
-function bytes(u:string){let p=BYTES.get(u);if(!p){p=fetch(u,{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error(r.status===401||r.status===403?'auth':'file');return r.arrayBuffer();});p.catch(()=>BYTES.delete(u));BYTES.set(u,p);}return p;}
+function bytes(u:string){let p=BYTES.get(u);if(!p){p=fetch(u,{cache:'no-store'}).catch(()=>{throw new Error('offline');}).then(r=>{if(!r.ok)throw new Error(r.headers.get('X-Offline')?'offline':r.status===401||r.status===403?'auth':'file');return r.arrayBuffer();});p.catch(()=>BYTES.delete(u));BYTES.set(u,p);}return p;}
+// Signing out leaves nothing of this account on the phone: the tickets list, names, kept ticket files and the saved app page.
+async function clearDevice(){try{for(const k of personalKeys(Object.keys(localStorage)))localStorage.removeItem(k);}catch{}
+ BYTES.clear();try{for(const k of await caches.keys())if(k.startsWith('unstage-'))await caches.delete(k);}catch{}
+ try{(await navigator.serviceWorker?.getRegistration())?.active?.postMessage('clear');}catch{}}
+// Ticket files kept for offline use, by URL.
+const TICKET_CACHE='unstage-tickets-v1';
 let pdfjs:Promise<any>|null=null;
 function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' as string).then((lib:any)=>{lib.GlobalWorkerOptions.workerSrc='/pdfjs/pdf.worker.min.mjs';return lib;}).catch(e=>{pdfjs=null;throw e;});return pdfjs;}
 // Save or send the ticket file through the phone's share sheet (a link would leave the home-screen app with no way back).
@@ -410,7 +436,7 @@ function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boo
   }catch(e){const why=e instanceof Error?e.message:'';
    // pdf.js could not draw it: Safari's own PDF view inside the app still shows the ticket.
    if(blob.current&&!off){setFrame(URL.createObjectURL(blob.current));return;}
-   setErr(why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img,page]);
+   setErr(why==='offline'?'אין חיבור לאינטרנט והכרטיס הזה עדיין לא נשמר במכשיר.':why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img,page]);
  useEffect(()=>()=>{if(frame)URL.revokeObjectURL(frame);},[frame]);
  return <div className="doc" ref={box}>{page&&<iframe className="pdfFrame keptPage" src={fileUrl(f)} title="הכרטיס" sandbox=""/>}{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&(first?<div className="loader"><Mark cls="lmark" anim="bob"/><p>{'פותח את הכרטיס…'}</p></div>:<div className="docWait" aria-hidden="true"/>)}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
 // Full-screen ticket viewer with a close button (a home-screen app has no browser back button): one file, or all of an event's tickets one under the other.

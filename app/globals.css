@@ -371,3 +371,4 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .giftOpt.on{border-color:#a77a2c;background:#2a1f0d}.giftOpt small{flex:1;color:var(--mut);font-weight:400;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .giftOpt .chk{width:22px;height:22px;border-radius:7px;border:1.5px solid #6b5420;display:grid;place-items:center;color:#1b1206;flex:none}.giftOpt.on .chk{background:#ffd27a;border-color:#ffd27a}
 .menu>button.primary{justify-content:center;background:linear-gradient(180deg,#ffd27a,#f5a623);color:#1b1206;border-color:transparent;font-weight:700}.menu>button.primary:disabled{opacity:.5}.menu>button.ghost{justify-content:center}
+.offNote{margin:10px 2px 0;color:#ffd79a;font-size:calc(15px*var(--fs));line-height:1.5}.offNote.ok{color:var(--mut)}

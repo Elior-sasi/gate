@@ -4,10 +4,13 @@ import {gemini} from '@/lib/gemini';
 import {mergeAll,cleanSeats} from '@/lib/combine';
 import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
 export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'other';
-export type TFile={msg:string;id:string;name:string;type:string;size:number};
-export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean};
+// at: when its mail was sent; order: the order it belongs to; stale: replaced by a newer ticket for the same order (not shown).
+export type TFile={msg:string;id:string;name:string;type:string;size:number;at?:number;order?:string;stale?:boolean};
+// mailed: when this mail was sent; update: the mail announces a change (new time, place, seats or a replacement ticket); restored: the event is back on.
+export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean;mailed?:number;update?:boolean;restored?:boolean};
 export type Ticket={parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
- seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean;seller?:string;cancel?:{text?:string;url?:string;label?:string}};
+ seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string}[];mailed:number;ai?:boolean;cancelled?:boolean;seller?:string;cancel?:{text?:string;url?:string;label?:string};
+ update?:boolean;restored?:boolean;at?:{start?:number;venue?:number;doors?:number}};
 const HE_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const EN_MONTHS=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
 const pad=(n:number)=>String(n).padStart(2,'0');
@@ -58,6 +61,15 @@ const PURCHASE=/אישור (?:ה)?(?:הזמנה|רכישה)|הזמנת(?:ך)? (?
 const MARKETING=/פרסומת|שיווקי|ניוזלטר|newsletter|עדכון שבועי|עדכוני |מבצע|המלצות|הנחה|במחיר מיוחד|כרטיסים אחרונים|sale\b|promo/i;
 // A cancellation or refund of tickets: kept apart from purchases, and joined to the event it cancels.
 export const CANCEL=/בוטל|בוטלה|בוטלו|ביטול|מבוטל|החזר כספי|זיכוי|cancel+(?:ed|ation)|refund/i;
+// Plain words in the mail itself, so Gemini alone never cancels, restores or replaces anything.
+export const CANCEL_SAID=/(?:האירוע|ההופעה|ההצגה|ההקרנה|המופע|ההרצאה|המשחק|ההזמנה|הזמנתך|הזמנתכם|הכרטיסים?)[^.\n]{0,25}(?:בוטל|בוטלה|בוטלו|מבוטל)|(?:has|have) been cancel|was cancel|is cancel|event cancel|order cancel|cancellation (?:of|confirm)/i;
+export const CHANGE=/שינוי (?:ב?מועד|ב?שעה|ב?שעת|ב?תאריך|ב?מקום|ב?אולם|ב?מושב|ב?מקומות|ב?הזמנה)|נדח(?:ה|תה|ו)|הוקד(?:ם|מה|מו)|הועבר(?:ה|ו)? (?:ל|מ)|מועד חדש|שעה חדשה|עדכון (?:מועד|שעה|הזמנה|מקום|כרטיס)|rescheduled|postponed|moved to|time change|date change|venue change|new date|new time/i;
+export const REPLACE=/כרטיס(?:ים)? (?:חלופי|חלופיים|חדש|חדשים|מעודכן|מעודכנים)|הכרטיס(?:ים)? הקודמ(?:ים)? (?:בוטל|אינו|אינם)|replacement tickets?|updated tickets?|new tickets? (?:attached|for)/i;
+export const RESTORE=/(?:חוזר|חזר|חזרה|יחזור) להתקיים|יתקיים כמתוכנן|יתקיים בכל זאת|ביטול הביטול|האירוע לא בוטל|reinstated|back on|will go ahead as planned/i;
+// What a mail says about an existing event, from its subject and opening lines.
+export function signals(subject:string,text:string){const head=subject+'\n'+text.slice(0,1500);
+ const restored=RESTORE.test(head);const replace=REPLACE.test(head);
+ return {restored,update:restored||replace||CHANGE.test(head),replace,cancelSaid:!restored&&(CANCEL.test(subject)&&!/אישור (?:הזמנה|רכישה)|confirmation/i.test(subject)||CANCEL_SAID.test(head))};}
 const NOT_PURCHASE=/טופס|forms|צפייה בפרטי כרטיס|כרטיס (?:אשראי|האשראי)|credit card/i;
 const domainOf=(from:string)=>(from.match(/@([\w.-]+)>?\s*$/)?.[1]||'').toLowerCase();
 const addr=(h:string)=>(h.match(/[\w.+-]+@[\w.-]+/)?.[0]||'').toLowerCase();
@@ -83,12 +95,12 @@ export const sellerOf=(m:Message)=>(header(m,'from').match(/@([\w.-]+)>?\s*$/)?.
 // Rule-based reading, used without a Gemini key and as the fallback when Gemini is busy.
 export function ruleTicket(m:Message,text:string):Ticket|null{
  const subject=header(m,'subject');const mailed=+(m.internalDate||Date.now());const all=subject+'\n'+text;
- const cancelled=CANCEL.test(subject)&&!/אישור (?:הזמנה|רכישה)|confirmation/i.test(subject);
- if((!TICKETISH.test(all)&&!(cancelled&&fromSeller(m)))||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
+ const sig=signals(subject,text);const cancelled=sig.cancelSaid;
+ if((!TICKETISH.test(all)&&!((cancelled||sig.restored)&&fromSeller(m)))||NOT_TICKET.test(subject)||!looksLikePurchase(m))return null;
  const lines=text.split('\n').map(l=>l.replace(/^[\s|#*]+|[\s|#*]+$/g,'')).filter(Boolean);
  // A table row "30/4/2026 19:45 | <film> | אולם 15 | 1 | שורה..." (Planet and others).
  const row=text.match(/(\d{1,2}[./]\d{1,2}[./]\d{2,4})\s+(\d{1,2}:\d{2})\s*\|\s*([^|\n]{2,100}?)\s*\|\s*([^|\n]{1,40}?)\s*\|/);
- const start=eventStart(text,mailed)||eventStart(subject,mailed)||'';if(!start&&!cancelled)return null;
+ const start=eventStart(text,mailed)||eventStart(subject,mailed)||'';if(!start&&!cancelled&&!sig.restored)return null;
  // PRES.global mails (Cinema City, cinematheques): "<event>\nב<venue>\nביום - …\nבשעה - …".
  const day=lines.findIndex(l=>/^ביום\s*[-:]/.test(l));const pres=day>=2&&/^ב\S/.test(lines[day-1])?day:-1;
  const named=pres>0?lines[pres-2]:field(text,'אירוע|שם (?:ה)?(?:אירוע|מופע|הצגה|סרט)|הצגה|מופע|event')||(row?row[3]:'');
@@ -106,7 +118,7 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
   order:pick(text,/(?:מס['׳]?\s*(?:ה)?הזמנה|מספר (?:ה)?הזמנה|order\s*(?:id|no\.?|number|#)|booking\s*(?:ref(?:erence)?|no\.?|#))\s*[:#\-|]?\s*([A-Z0-9-]{4,24})/i)||pick(text,/(?:אישור הזמנה|ביטול הזמנה|booking confirmation)\s*\n?\s*#?\s*(\d[\d-]{5,24})/i)||pick(text,/(?:^|\n)מס["״]ד\s*[|:]\s*(\d{4,12})/)||undefined,
   provider:header(m,'from').replace(/<.*>/,'').replace(/"/g,'').trim()||undefined,seller:sellerOf(m)||undefined,
   price:pick(text,/(?:סה["״]?כ(?: תשלום)?(?: בהזמנה)?(?: לתשלום)?|סכום כולל ששולם|total)\s*[:\-|]?\s*(₪\s?[\d,.]+|[\d,.]+\s?₪|[$€£]\s?[\d,.]+)/i)||undefined,
-  files,links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),cancel:cancelled?undefined:cancelInfo(text,links),mailed,cancelled};}
+  files,links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),cancel:cancelled?undefined:cancelInfo(text,links),mailed,cancelled,...(sig.update?{update:true}:{}),...(sig.restored?{restored:true}:{})};}
 const SCHEMA={type:'OBJECT',properties:{
  isTicket:{type:'BOOLEAN',description:'true for tickets/booking confirmations for an event (concert, show, movie, sport, festival, stand-up, lecture), and also for a mail cancelling or refunding such tickets or saying such an event was cancelled. false for flights, hotels, shop orders, marketing, newsletters.'},
  title:{type:'STRING',description:'Short event name as people say it, in the language used in the mail (Hebrew preferred): the film, show, artist or lecture title - not the cinema or venue name. No words like "אישור הזמנה" or order numbers.'},
@@ -128,33 +140,34 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  const r=await gemini({systemInstruction:{parts:[{text:'You read emails for an Israeli user and extract event ticket details as JSON. Cinemas and cinematheques sell tickets to lectures and talks too: tell a lecture from a film screening. Be exact; leave fields out when the mail does not say them.'}]},contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',responseSchema:SCHEMA,temperature:0}},20000);
  if(!r.ok)return {ok:false};
  let j:Record<string,any>;try{j=JSON.parse(r.text);}catch{return {ok:false};}
- const cx=!!j.cancelled||!!j.eventCancelled;const dated=/^\d{4}-\d{2}-\d{2}/.test(String(j.start||''));
+ const sig=signals(subject,text);const cx=(!!j.cancelled||!!j.eventCancelled)&&sig.cancelSaid;const dated=/^\d{4}-\d{2}-\d{2}/.test(String(j.start||''));
  // A cancellation may leave out the date: it is kept only to be joined to the event it cancels (by order number or name).
- if(!j.isTicket||(!dated&&!cx))return {ok:true,ticket:null};
+ if(!j.isTicket||(!dated&&!cx&&!sig.restored))return {ok:true,ticket:null};
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;const links=ticketLinks(m);
  return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:(['concert','show','movie','lecture','sport','festival','standup','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,
   start:dated?String(j.start).slice(0,16):'',doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
-  order:j.eventCancelled&&!j.order?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,
+  order:j.eventCancelled&&!j.order?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,...(sig.update?{update:true}:{}),...(sig.restored?{restored:true}:{}),
   cancel:cx?undefined:(()=>{const c=cancelInfo(text,links);const p=typeof j.cancelPolicy==='string'&&j.cancelPolicy.trim()?j.cancelPolicy.trim().slice(0,300):'';return p||c?{...c,text:c?.text||p}:undefined;})()}};}
 export type Read={ticket:Ticket|null;retry:boolean};
 // last: this mail already waited once for Gemini, so the rules' reading is used rather than waiting again.
 export async function readTicket(m:Message,last=false):Promise<Read>{
  const text=bodyText(m);const rule=ruleTicket(m,text);
  // Mail with no ticket words at all is skipped without spending a Gemini call.
- const cx=CANCEL.test(header(m,'subject'))&&fromSeller(m);
+ const cx=(CANCEL.test(header(m,'subject'))||RESTORE.test(header(m,'subject')+'\n'+text.slice(0,1500)))&&fromSeller(m);
  if((!TICKETISH.test(header(m,'subject')+'\n'+text)&&!cx)||!looksLikePurchase(m))return {ticket:null,retry:false};
  const ai=await aiTicket(m,text);
  // Gemini and the rules together: the order number the rules found fills in what Gemini left out. A cancellation mail
  // ("ביטול הזמנה 74593-…") is about that order, so it keeps the number and joins the purchase it cancels.
  if(ai.ok){let t=ai.ticket;
-  if(!t&&rule?.cancelled&&rule.order)t=rule;
+  if(!t&&(rule?.cancelled||rule?.restored)&&rule.order)t=rule;
   if(t&&rule?.order&&(!t.order||t.cancelled))t={...t,order:rule.order};
   return {ticket:t?withKey(t):null,retry:false};}
  // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).
  if(process.env.GEMINI_API_KEY&&!last)return {ticket:rule?withKey(rule):null,retry:true};
  return {ticket:rule?withKey(rule):null,retry:false};}
 const norm=(s:string)=>s.toLowerCase().replace(/[^\w֐-׿]+/g,'');
-export function withKey(t:Ticket):Ticket{return {...t,key:t.order?'o:'+norm(t.order):'t:'+norm(t.title).slice(0,24)+':'+t.start.slice(0,10)};}
+// Each file remembers its mail's date and order, so a newer replacement ticket for that order can take its place.
+export function withKey(t:Ticket):Ticket{return {...t,files:t.files.map(f=>({...f,at:f.at??t.mailed,...(t.order&&!f.order?{order:t.order}:{})})),key:t.order?'o:'+norm(t.order):'t:'+norm(t.title).slice(0,24)+':'+t.start.slice(0,10)};}
 // Several mails about one event (confirmation, reminder, the tickets themselves) become one card.
 // Several mails about one event (confirmation, reminder, a second order for more seats) become one card.
 export function mergeTickets(list:Ticket[]):Ticket[]{return mergeAll([],[...list].sort((a,b)=>a.mailed-b.mailed));}
