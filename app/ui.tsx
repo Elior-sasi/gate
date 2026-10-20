@@ -101,7 +101,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  const scan=useCallback(async(fresh=false)=>{if(!user||running.current)return;running.current=true;setBusy(true);setErr('');setProg({pct:3,label:'מתחבר ל־Gmail…'});
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
    const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json().catch(()=>({error:'הסריקה לא הושלמה. נסה שוב.'}));if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
-   const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));let cur=base;
+   const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));
    // As in Unbox: "נקראו 12 מתוך 40 מיילים חדשים", then "משלים 5 מיילים שלא נקראו…".
    const step=(done:number)=>setProg({pct:todo.length?Math.min(90,Math.round(5+85*done/todo.length)):90,label:todo.length?'נקראו '+done+' מתוך '+todo.length+' מיילים חדשים':'אין מיילים חדשים'});step(0);
    const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=4)o.push(l.slice(i,i+4));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
@@ -109,11 +109,12 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
 const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:b,last:second})}).catch(()=>null);const d=res?await res.json().catch(()=>null):null;
      // A batch that timed out (no JSON back) is read again in the second round instead of stopping the whole scan.
      if(!res||!res.ok||!d){if(res&&d&&(res.status===401||res.status===403))throw new Error(d.error);if(!second)retryIds.push(...b);done+=b.length;if(!second)step(done);continue;}
-     cur={tickets:mergeAll(cur.tickets,d.tickets),read:[...cur.read,...d.read],updated:cur.updated};setStore(cur);save(KEY(user.id),cur);if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)step(done);}second=true;};
+     // Merged into the latest state (not a copy from when the scan began), so a ticket added meanwhile (an SMS) is not lost.
+     setStore(s=>{const n={tickets:mergeAll(s.tickets,d.tickets),read:[...s.read,...d.read],updated:s.updated};save(KEY(user.id),n);return n;});if(!second)retryIds.push(...(d.retry||[]));done+=b.length;if(!second)step(done);}second=true;};
    await worker();
    // Mail Gemini could not read yet (busy) is tried again once after a short pause.
    if(retryIds.length){setProg({pct:92,label:'משלים '+retryIds.length+' מיילים שלא נקראו…'});await new Promise(r=>setTimeout(r,25000));batches.push(...chunk(retryIds.splice(0)));await worker();}
-   cur={...cur,updated:new Date().toISOString()};setStore(cur);save(KEY(user.id),cur);setProg({pct:100,label:'הסריקה הושלמה'});
+   setStore(s=>{const n={...s,updated:new Date().toISOString()};save(KEY(user.id),n);return n;});setProg({pct:100,label:'הסריקה הושלמה'});
   }catch(e){const m=e instanceof Error?e.message:'';setErr(/load failed|failed to fetch|network/i.test(m)||!m?'החיבור נקטע באמצע הסריקה. נסה שוב.':m);}
   finally{running.current=false;setBusy(false);setTimeout(()=>setProg(null),700);}},[user]);
  // Offline: no scan (it would only fail); the tickets on the phone show as they are, and the scan runs when the connection is back.
@@ -181,22 +182,26 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    finally{keeping.current=false;}})();},[user,busy,store.tickets]);
  // Tickets that came by SMS (forwarded by the iPhone Shortcut, or pasted): the kept copy is added to its event as the newest ticket of that order.
  // One that matches no event yet waits on the phone until a scan brings the event.
+ const storeRef=useRef(store);storeRef.current=store;
  const SMS=(u:string)=>'gate:sms:'+u;const [smsLast,setSmsLast]=useState<{at:string;kind:string;shape?:string;raw?:number}|null>(null);
  const pullSms=useCallback(async()=>{if(!user||user.id==='demo'||!navigator.onLine)return;let got:(SmsTicket&{file?:TFile|null;at:string;info?:PresInfo})[]=[];
   try{const r=await fetch('/api/sms',{cache:'no-store'});if(r.ok){const d=await r.json();got=d.items||[];setSmsLast(d.last||null);}}catch{}
-  const waiting=[...load(SMS(user.id),[] as typeof got),...got].filter(x=>x.url&&Date.now()-new Date(x.at).getTime()<60*864e5);if(!waiting.length)return;
-  const left:typeof got=[];let added='';
-  setStore(s=>{let tickets=s.tickets;for(const x of waiting){const m=matchSms(tickets,x.info?.order&&!x.ref?{...x,ref:x.info.order}:x);if(!m){left.push(x);continue;}
+  const waiting=[...load(SMS(user.id),[] as typeof got),...got].filter((x,i,a)=>x.url&&Date.now()-new Date(x.at).getTime()<60*864e5&&a.findIndex(y=>y.url===x.url&&y.at===x.at)===i);if(!waiting.length)return;
+  // Kept on the phone (the server hands each message over once) and applied again on every pull: adding is idempotent,
+  // so a ticket survives a scan that was running meanwhile, or a full rescan.
+  save(SMS(user.id),waiting.slice(-30));const fix=(x:typeof got[number])=>x.info?.order&&!x.ref?{...x,ref:x.info.order}:x;
+  const added=waiting.map(x=>{const m=matchSms(storeRef.current.tickets,fix(x));return m&&x.file&&!m.event.files.some(g=>g.id===x.file!.id)?m.event.title:'';}).find(Boolean)||'';
+  setStore(s=>{let tickets=s.tickets;for(const x of waiting){const m=matchSms(tickets,fix(x));if(!m)continue;
     // The page could not be copied (built by scripts, or it asked to sign in): the SMS link itself is added to the event instead.
-    if(!x.file){tickets=tickets.map(t=>t.key!==m.event.key||t.links.some(l=>l.url===x.url)?t:{...t,links:[{label:'הכרטיס מ-SMS',url:x.url},...t.links].slice(0,5)});added=m.event.title;continue;}
+    if(!x.file){if(waiting.some(y=>y.url===x.url&&y.file))continue;tickets=tickets.map(t=>t.key!==m.event.key||t.links.some(l=>l.url===x.url)?t:{...t,links:[{label:'הכרטיס מ-SMS',url:x.url},...t.links].slice(0,5)});continue;}
     const at=new Date(x.at).getTime();const f:TFile={...x.file,msg:'sms'+at,at,...(m.order?{order:m.order}:{})};
     // Same order: the SMS ticket is the newer one, so the older file of that order steps aside (it stays known, not shown),
     // and its seats (read from the ticket itself) replace that order's seats. The bare SMS link, if added before, goes.
     tickets=tickets.map(t=>{if(t.key!==m.event.key||t.files.some(g=>g.id===f.id))return t;
      let n:Ticket={...t,links:t.links.filter(l=>l.url!==x.url),files:[...t.files.map(g=>m.order&&g.order===m.order&&!/pkpass/i.test(g.type+g.name)?{...g,stale:true}:g),f]};
-     if(x.info&&x.info.seats.length)n=withSms(n,'m:'+f.msg,at,{...x.info,order:m.order||x.info.order});return n;});added=m.event.title;}
+     if(x.info&&x.info.seats.length)n=withSms(n,'m:'+f.msg,at,{...x.info,order:m.order||x.info.order});return n;});}
    const n={...s,tickets};save(KEY(user.id),n);return n;});
-  save(SMS(user.id),left);if(added)say('כרטיס מ-SMS נוסף ל'+added);},[user]);
+  if(added)say('כרטיס מ-SMS נוסף ל'+added);},[user]);
  useEffect(()=>{if(ready&&!busy)void pullSms();},[ready,busy,pullSms]);
  // Back in the app after the connection dropped mid-scan: carry on by itself (what was read is kept).
  useEffect(()=>{if(!err.startsWith('החיבור נקטע'))return;const on=()=>{if(document.visibilityState==='visible')void scan();};document.addEventListener('visibilitychange',on);return()=>document.removeEventListener('visibilitychange',on);},[err,scan]);
