@@ -126,8 +126,8 @@ export async function readTicket(m:Message,last=false):Promise<Read>{
  if(!TICKETISH.test(header(m,'subject')+'\n'+text)||!looksLikePurchase(m))return {ticket:null,retry:false};
  const ai=await aiTicket(m,text);
  if(ai.ok)return {ticket:ai.ticket?withKey(ai.ticket):null,retry:false};
- // Gemini busy: wait and read the mail again (a rough card would only be replaced a minute later). Gemini off, or a second miss: the rules.
- if(process.env.GEMINI_API_KEY&&!last)return {ticket:null,retry:true};
+ // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).
+ if(process.env.GEMINI_API_KEY&&!last)return {ticket:rule?withKey(rule):null,retry:true};
  return {ticket:rule?withKey(rule):null,retry:false};}
 const norm=(s:string)=>s.toLowerCase().replace(/[^\w֐-׿]+/g,'');
 export function withKey(t:Ticket):Ticket{return {...t,key:t.order?'o:'+norm(t.order):'t:'+norm(t.title).slice(0,24)+':'+t.start.slice(0,10)};}
