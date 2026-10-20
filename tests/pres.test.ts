@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {presApi,presTicket} from '@/lib/pres';
-import {withSms,current} from '@/lib/combine';
+import {withSms,current,mergeAll} from '@/lib/combine';
 import type {Ticket} from '@/lib/tickets';
 const T=(o:object)=>({reservationIdentifier:'209803927955490',reservationIdentifierFormatted:'20980-39279-55490',featureName:'טארה סטרונג - מאסטרקלאס',venueName:'סינמטק 2',locationHeader1:'סינמטק ירושלים',
  locationSubheader1:'דרך חברון 11,ירושלים',presentationDateTime:'2026-11-03 17:00:00',isReserved:true,row:'1',...o});
@@ -18,3 +18,12 @@ test('a pres.global ticket is drawn with a QR per ticket, and its seats replace 
    files:[{msg:'a',id:'f1',name:'t.pdf',type:'application/pdf',size:1,at:1,order:'20980-39279-55490'},{msg:'sms5',id:'k_x',name:'כרטיס.html',type:'text/html',size:1,at:5,order:'20980-39279-55490'}]};
   const n=withSms(t,'m:sms5',5,r.info);assert.deepEqual(n.seats,['שורה 1, כיסא 3','שורה 1, כיסא 4']);assert.equal(n.count,2);assert.deepEqual(current(n).map(f=>f.id),['k_x']);
  }finally{globalThis.fetch=real;}});
+test('tickets exchanged at the box office into the SMS order are not counted twice',()=>{
+ const mk=(msg:string,order:string,seats:string[],count:number,mailed:number):Ticket=>({key:'k'+msg,msgs:[msg],thread:'th',title:'טארה סטרונג - מאסטרקלאס',kind:'movie',start:'2026-11-03T17:00',seats,count,order,price:'₪ '+43*count,mailed,links:[],
+  files:[{msg,id:'f'+msg,name:'p.pdf',type:'application/pdf',size:1,at:mailed,order}]});
+ const [t]=mergeAll([],[mk('a','16320-39278-74340',['שורה 1, כיסא 5','שורה 1, כיסא 6'],2,1),mk('b','20980-39279-55490',['שורה 1, כיסא 2'],1,2),mk('c','55310-39279-82909',['שורה 1, כיסא 10'],1,3)]);
+ const f={msg:'sms9',id:'k_x',name:'כרטיס.html',type:'text/html',size:1,at:9,order:'20980-39279-55490'};
+ const n=withSms({...t,files:[...t.files,f]},'m:sms9',9,{order:'20980-39279-55490',seats:['שורה 1, כיסא 3','שורה 1, כיסא 4'],count:2});
+ assert.deepEqual(n.seats,['שורה 1, כיסא 3','שורה 1, כיסא 4','שורה 1, כיסא 5','שורה 1, כיסא 6']);assert.equal(n.count,4);assert.deepEqual(current(n).map(f=>f.id).sort(),['fa','k_x']);
+ const again=mergeAll([n],[mk('c','55310-39279-82909',['שורה 1, כיסא 10'],1,3),mk('b','20980-39279-55490',['שורה 1, כיסא 2'],1,2)])[0];
+ assert.equal(again.count,4);assert.deepEqual(current(again).map(f=>f.id).sort(),['fa','k_x']);});

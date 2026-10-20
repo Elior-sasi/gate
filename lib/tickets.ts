@@ -7,7 +7,7 @@ export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'
 // at: when its mail was sent; order: the order it belongs to; stale: replaced by a newer ticket for the same order (not shown).
 export type TFile={msg:string;id:string;name:string;type:string;size:number;at?:number;order?:string;stale?:boolean};
 // mailed: when this mail was sent; update: the mail announces a change (new time, place, seats or a replacement ticket); restored: the event is back on.
-export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean;mailed?:number;update?:boolean;restored?:boolean};
+export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean;mailed?:number;update?:boolean;restored?:boolean;into?:string};
 export type Ticket={parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
  seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string;msg?:string}[];mailed:number;ai?:boolean;cancelled?:boolean;seller?:string;cancel?:{text?:string;url?:string;label?:string};
  update?:boolean;restored?:boolean;at?:{start?:number;venue?:number;doors?:number}};

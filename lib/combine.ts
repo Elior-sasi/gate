@@ -32,16 +32,16 @@ function byOrder(parts:Record<string,Part>){const groups=new Map<string,[string,
   const [k,base]=upd||pool.reduce((a,b)=>{const [,p]=b,[,q]=a;return (p.ai&&!q.ai)||(!!p.ai===!!q.ai&&(p.seats?.length||0)>(q.seats?.length||0))?b:a;});
   const marks=list.filter(([,p])=>p.cancelled||p.restored).sort((a,b)=>at(a[1])-at(b[1]));const last=marks[marks.length-1]?.[1];
   const cancelled=!!last?.cancelled&&!last.restored;const {cancelled:_c,restored:_r,...rest}=base;
-  out[k]={...rest,mailed:Math.max(...list.map(([,p])=>at(p))),...(cancelled?{cancelled:true}:{}),...(list.some(([,p])=>p.update)?{update:true}:{}),...(!cancelled&&last?.restored?{restored:true}:{})};}
+  out[k]={...rest,mailed:Math.max(...list.map(([,p])=>at(p))),...(cancelled?{cancelled:true}:{}),...(list.some(([,p])=>p.update)?{update:true}:{}),...(!cancelled&&last?.restored?{restored:true}:{}),...(list.find(([,p])=>p.into)?{into:list.find(([,p])=>p.into)![1].into}:{})};}
  return out;}
 // Cancelled orders do not count; a cancellation with no order number (the event itself) cancels everything, unless a later mail says it is back on.
 export const status=(all:Record<string,Part>)=>statusOf(Object.values(byOrder(all)));
 function statusOf(list:Part[]){
  const whole=list.filter(p=>!p.order&&(p.cancelled||p.restored)).sort((a,b)=>at(a)-at(b)).pop();const wholeCx=!!whole?.cancelled;
- const real=list.filter(p=>!notice(p)||p.order);const live=wholeCx?[]:real.filter(p=>!p.cancelled&&!notice(p));
- return {cancelled:!live.length&&(wholeCx||list.some(p=>p.cancelled)),live,some:!wholeCx&&live.length>0&&list.some(p=>p.cancelled&&p.order)};}
+ const real=list.filter(p=>!p.into&&(!notice(p)||p.order));const live=wholeCx?[]:real.filter(p=>!p.cancelled&&!notice(p));
+ return {cancelled:!live.length&&(wholeCx||list.some(p=>p.cancelled)),live,some:!wholeCx&&live.length>0&&list.some(p=>p.cancelled&&p.order&&!p.into)};}
 export function totals(all:Record<string,Part>){const ordered=Object.values(byOrder(all));const st=statusOf(ordered);
- const parts=st.live.length?st.live:ordered.filter(p=>!notice(p));
+ const parts=st.live.length?st.live:ordered.filter(p=>!notice(p)&&!p.into);
  const seats=cleanSeats(parts.flatMap(p=>p.seats||[])).slice(0,20);
  const count=parts.reduce((a,p)=>a+(p.count||cleanSeats(p.seats||[]).length||1),0);const sum=parts.reduce((a,p)=>a+money(p.price),0);const cur=parts.map(p=>p.price||'').find(x=>/[₪$€£]/.test(x))?.match(/[₪$€£]/)?.[0]||'₪';
  const orders=parts.map(p=>p.order).filter(Boolean) as string[];
@@ -56,13 +56,14 @@ const day=(s:string)=>s.slice(0,10);
 // A file is replaced when a newer mail about the same order (or the event, with no order) brings a ticket of its own and says it is a change or a replacement,
 // or brings different seats for that order, or a ticket for that order came by SMS (lib/sms). The old file stays known (so it is not fetched again) but is never shown.
 function freshFiles(files:TFile[],parts:Record<string,Part>){const partOf=(f:TFile)=>parts['m:'+f.msg];
- return files.map(f=>{const p=partOf(f);const o=f.order?norm(f.order):'';
+ const merged=new Set(Object.values(parts).filter(p=>p.into&&p.order).map(p=>norm(p.order!)));
+ return files.map(f=>{const p=partOf(f);const o=f.order?norm(f.order):'';if(o&&merged.has(o)&&!f.msg.startsWith('sms'))return {...f,stale:true};
   const newer=files.some(g=>g!==f&&(g.at||0)>(f.at||0)&&(!o||!g.order||norm(g.order)===o)&&(partOf(g)?.update||(g.msg.startsWith('sms')&&!!o&&!!g.order&&norm(g.order)===o)||(o&&g.order&&partOf(g)&&p&&cleanSeats(partOf(g)!.seats||[]).join('|')!==cleanSeats(p.seats||[]).join('|')&&(partOf(g)!.seats||[]).length>0)));
   return newer?{...f,stale:true}:f.stale?{...f,stale:false}:f;});}
 export function combine(o:Ticket,t:Ticket):Ticket{
  // The purchase mail (it has the date) describes the event; a short cancellation notice only marks it.
  const best=o.start&&!t.start?o:t.start&&!o.start?t:t.ai&&!o.ai?t:o.ai&&!t.ai?o:t;const parts={...partsOf(o)};
- for(const [k,p] of Object.entries(partsOf(t))){const old=parts[k];parts[k]=!old||(p.ai&&!old.ai)||(!!p.ai===!!old.ai&&(p.seats?.length||0)>=(old.seats?.length||0))?p:old;}
+ for(const [k,p] of Object.entries(partsOf(t))){const old=parts[k];parts[k]=!old||(p.ai&&!old.ai)||(!!p.ai===!!old.ai&&(p.seats?.length||0)>=(old.seats?.length||0))?p:old;if(old?.into&&!parts[k].into)parts[k]={...parts[k],into:old.into};}
  const tot=totals(parts);const kept=byOrder(parts);
  const A=(x:Ticket,f:'start'|'venue'|'doors')=>({v:x[f],at:x.at?.[f]??x.mailed,ai:x.ai});
  const start=pick(A(o,'start'),A(t,'start'),(x,y)=>x===y,(x,y)=>day(x)===day(y)&&x.includes('T')&&!y.includes('T'));
@@ -91,8 +92,17 @@ export function mergeAll(a:Ticket[],b:Ticket[]){let out=[...a];
 // The files to show and keep offline: replaced tickets are left out.
 export const current=(t:Ticket)=>t.files.filter(f=>!f.stale);
 // A ticket that came by SMS with its details read (lib/pres): it is the newest reading of its order, so its seats replace that order's,
-// and its time is the newest statement of it.
-export function withSms(t:Ticket,key:string,at:number,i:{order?:string;seats:string[];count:number;price?:string;start?:string;hall?:string;venue?:string}):Ticket{
- const parts={...partsOf(t),[key]:{seats:i.seats,count:i.count,price:i.price,order:i.order,mailed:at,update:true} as Part};const tot=totals(parts);
- const start=i.start&&i.start!==t.start?{start:i.start,at:{...t.at,start:at}}:{};
- return {...t,...start,parts:byOrder(parts),seats:tot.seats,count:tot.count,price:tot.price??t.price,files:freshFiles(t.files,parts)};}
+// and its time is the newest statement of it. At the box office tickets of several orders are sometimes exchanged into one
+// (seats 2 and 10 → seats 3 and 4, under the first order): when the SMS order now holds more tickets than its mail said, and exactly
+// one set of the event's other orders makes up the difference, those orders were folded into it and are no longer counted.
+export function withSms(t:Ticket,key:string,at:number,i:{order?:string;seats:string[];count:number;price?:string;start?:string}):Ticket{
+ const before=byOrder(partsOf(t));const o=i.order?norm(i.order):'';const n=(p:Part)=>p.count||cleanSeats(p.seats||[]).length||1;
+ const mine=Object.values(before).find(p=>p.order&&norm(p.order)===o);let extra=mine?i.count-n(mine):0;
+ const others=Object.entries(before).filter(([,p])=>p.order&&norm(p.order)!==o&&!p.cancelled&&!p.into&&!notice(p));const folded:string[]=[];
+ if(o&&extra>0&&others.length<=8){const hits:string[][]=[];
+  for(let m=1;m<1<<others.length;m++){const set=others.filter((_,j)=>m>>j&1);if(set.reduce((a,[,p])=>a+n(p),0)===extra)hits.push(set.map(([k])=>k));}
+  if(hits.length===1)folded.push(...hits[0]);}
+ const parts:Record<string,Part>={...before,[key]:{seats:i.seats,count:i.count,price:i.price,order:i.order,mailed:at,update:true}};
+ for(const k of folded)parts[k]={...parts[k],into:i.order};
+ const tot=totals(parts);const start=i.start&&i.start!==t.start?{start:i.start,at:{...t.at,start:at}}:{};
+ return {...t,...start,parts:byOrder(parts),seats:tot.seats,count:tot.count,price:tot.price??t.price,order:tot.orders.length>1?tot.orders.join(', '):tot.orders[0]||t.order,files:freshFiles(t.files,parts)};}
