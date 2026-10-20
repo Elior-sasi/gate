@@ -34,8 +34,8 @@ export function eventStart(text:string,mailed:number){const sent=new Date(mailed
 const pick=(text:string,re:RegExp)=>text.match(re)?.[1]?.replace(/\s*\|\s*$/,'').replace(/\s+/g,' ').trim().slice(0,80)||'';
 export function seatsIn(text:string){const out:string[]=[];const S='[\\s:\\-|,]*';
  // Ranges: "כיסאות: 5 - 6", "כיסא | 14-15", "Seats: 7 - 9".
- for(const x of text.matchAll(new RegExp('(?:אזור'+S+"([\\w\\u0590-\\u05FF'-]{1,12})[\\s,|]*)?(?:שורה|row)"+S+'(\\w{1,4})[\\s,|]*(?:כי?סא(?:ות)?|מושבים|מקומות|seats?)'+S+'(\\d{1,4})\\s*[-–]\\s*(\\d{1,4})','gi'))){const a=+x[3],b=+x[4];if(b>=a&&b-a<12)for(let n=a;n<=b;n++){const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+n;if(!out.includes(s))out.push(s);}}
- for(const x of text.matchAll(new RegExp("(?:(?:אזור|יציע|גוש|section|block)"+S+"([\\w\\u0590-\\u05FF'-]{1,12})[\\s,|]*)?(?:שורה|row)"+S+'(\\w{1,4})[\\s,|]*(?:כי?סא|מושב|מקום|seat)'+S+'(\\d{1,4})(?!\\d|\\s*[-–]\\s*\\d)','gi'))){
+ for(const x of text.matchAll(new RegExp('(?:אזור'+S+"([\\w\\u0590-\\u05FF'-]{1,12})[\\s,|]*)?(?:שורה|row)"+S+'(\\d{1,3}[A-Za-zא-ת]?|[A-Za-zא-ת]{1,2}\\d{0,2})(?![A-Za-zא-ת])[\\s,|]*(?:כי?סא(?:ות)?|מושבים|מקומות|seats?)'+S+'(\\d{1,4})\\s*[-–]\\s*(\\d{1,4})','gi'))){const a=+x[3],b=+x[4];if(b>=a&&b-a<12)for(let n=a;n<=b;n++){const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+n;if(!out.includes(s))out.push(s);}}
+ for(const x of text.matchAll(new RegExp("(?:(?:אזור|יציע|גוש|section|block)"+S+"([\\w\\u0590-\\u05FF'-]{1,12})[\\s,|]*)?(?:שורה|row)"+S+'(\\d{1,3}[A-Za-zא-ת]?|[A-Za-zא-ת]{1,2}\\d{0,2})(?![A-Za-zא-ת])[\\s,|]*(?:כי?סא|מושב|מקום|seat)'+S+'(\\d{1,4})(?!\\d|\\s*[-–]\\s*\\d)','gi'))){
   const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+x[3];if(!out.includes(s))out.push(s);}
  return out.slice(0,12);}
 const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?(?:הזמנה|רכישה)|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;

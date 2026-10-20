@@ -10,7 +10,7 @@ const S:[RegExp,Cancel][]=[
  [/leaan\.co\.il$/,{name:'לאן',note:'עד 7 ימי עסקים לפני האירוע, בוואטסאפ או במייל. דמי ביטול: 5% או 100 ₪, הנמוך מביניהם.',url:'https://www.leaan.co.il/content/%D7%91%D7%99%D7%98%D7%95%D7%9C-%D7%A2%D7%A1%D7%A7%D7%94',label:'ביטול עסקה',wa:'972503002526',mail:'support@leaan.co.il'}],
  [/eventim\.co\.il$/,{name:'איוונטים',note:'ביטול בטופס ביטול עסקה של איוונטים.',url:'https://www.eventim.co.il/obj/media/IL-eventim/pdf/iw/eventim-shaket-cancelation-new301016.pdf',label:'טופס ביטול עסקה'}],
  [/ticketmaster\.co\.il$/,{name:'טיקטמאסטר',note:'באתר: החשבון שלי, הכרטיסים שלי, ובחירת ההזמנה. אפשר לבטל רק את כל ההזמנה. בעיות: 9964*.',url:'https://help.ticketmaster.co.il/hc/he/articles/45109561617681',label:'איך מבטלים',tel:'*9964'}],
- [/go-out\.co$/,{name:'GO-OUT',note:'בקשת החזר דרך מרכז העזרה של GO-OUT.',url:'https://help.go-out.co/en/collections/9481821-refunds',label:'החזרים ב-GO-OUT'}],
+ [/go-out\.co$/,{name:'GO-OUT',note:'טופס בקשת החזר של GO-OUT: עד 14 יום מהרכישה ולפחות 7 ימים שאינם ימי מנוחה לפני האירוע. ההפקה מאשרת או דוחה, והאישור מגיע ב-SMS.',url:'https://www.go-out.co/requestrefund',label:'טופס בקשת החזר'}],
  [/eventer\.co\.il$/,{name:'Eventer',note:'ביטול בטופס ביטול ההזמנה של Eventer.',url:'https://www.eventer.co.il/orderCancellation',label:'טופס ביטול הזמנה'}],
  [/zappa-club\.co\.il$/,{name:'זאפה',note:'תנאי הביטול בתקנון של זאפה.',url:'https://www.zappa-club.co.il/help/terms/',label:'תקנון'}]];
 // Israeli consumer law for tickets bought online or by phone (המועצה הישראלית לצרכנות).
