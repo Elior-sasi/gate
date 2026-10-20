@@ -361,3 +361,7 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 /* Cancelling */
 .cancelBox .cxWhen{margin:2px 0 4px;font-weight:700;color:var(--ink)}.cancelBox .cxWhen.late{color:var(--bad)}
 .cxBtns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.cxBtns a{flex:1 1 140px;min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:14px;text-decoration:none}
+/* Ticket file buttons: the count stays whole, the seats give way. "Show all" first, in gold. */
+.file span{flex:0 1 auto}.file small{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.file.all{background:linear-gradient(180deg,#ffd27a,#f5a623);color:#1b1206;border-color:transparent}
+.viewerBody .doc{width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}

@@ -80,7 +80,7 @@ const Logo=()=><Mark/>;
 function GoogleButton({label,disabled}:{label:string;disabled?:boolean}){return <button className="gbtn" disabled={disabled}><svg width="22" height="22" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.3-.4-3.5z"/></svg><span>{label}</span></button>;}
 export default function App({user,gmail,configured,login}:{user:User|null;gmail:boolean;configured:boolean;login:()=>Promise<void>}){
  const [store,setStore]=useState<Store>({tickets:[],read:[],updated:''});const [hidden,setHidden]=useState<string[]>([]);const [ready,setReady]=useState(false);
- const [tab,setTab]=useState(0);const [filt,setFilt]=useState<'next'|'past'|'cx'>('next');const [menu,setMenu]=useState<Ticket|null>(null);const [menuView,setMenuView]=useState<TFile|null>(null);const press=useRef<{t?:ReturnType<typeof setTimeout>;fired:boolean}>({fired:false});const slide=useRowSlide();const [names,setNames]=useState<Record<string,string>>({});const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
+ const [tab,setTab]=useState(0);const [filt,setFilt]=useState<'next'|'past'|'cx'>('next');const [menu,setMenu]=useState<Ticket|null>(null);const [menuView,setMenuView]=useState<TFile[]|null>(null);const press=useRef<{t?:ReturnType<typeof setTimeout>;fired:boolean}>({fired:false});const slide=useRowSlide();const [names,setNames]=useState<Record<string,string>>({});const [size,setSize]=useState(0);const [q,setQ]=useState('');const [open,setOpen]=useState<string|null>(null);
  const [busy,setBusy]=useState(false);const [prog,setProg]=useState<[number,number]|null>(null);const [err,setErr]=useState('');const [toast,setToast]=useState('');
  const running=useRef(false);
  useEffect(()=>{if(!user)return;if(user.id==='demo'){import('@/lib/demo').then(d=>{setStore(d.demo());setReady(true);});return;}setStore(load(KEY(user.id),{tickets:[],read:[],updated:''}));setHidden(load(HID(user.id),[]));setNames(load(NAM(user.id),{}));setSize(load('unstage:size',0));setReady(true);},[user]);
@@ -201,7 +201,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   </div></div>}
   {menu&&<div className="menuWrap" onClick={()=>setMenu(null)}><div className="menu" role="dialog" aria-modal="true" aria-label={'פעולות: '+menu.title} onClick={e=>e.stopPropagation()} {...swipeClose(()=>setMenu(null))}><SheetTop close={()=>setMenu(null)}/>
    <p className="menuTitle">{bidi(menu.title)}</p>
-   {(()=>{const fs=menu.files.filter(f=>!/pkpass/i.test(f.type+f.name));return fs.length>0&&<button onClick={()=>{if(fs.length>1){const k=menu.key;setMenu(null);setOpen(k);}else setMenuView(fs[0]);}}><QrCode size={20}/> {showLabel(menu)}</button>;})()}
+   {(()=>{const fs=menu.files.filter(f=>!/pkpass/i.test(f.type+f.name));return fs.length>0&&<button onClick={()=>{setMenuView(fs);}}><QrCode size={20}/> {showLabel(menu)}</button>;})()}
    {where(menu)&&<div className="menuNav"><div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(where(menu))+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(where(menu))} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
    {upcoming(menu)&&!menu.cancelled&&<button onClick={()=>{addToCalendar(menu);setMenu(null);}}><CalendarPlus size={20}/> הוספה ליומן</button>}
    {menu.order&&<button onClick={()=>{navigator.clipboard?.writeText(menu.order!).then(()=>say('הועתק'),()=>{});setMenu(null);}}><Copy size={20}/> העתק מספר הזמנה</button>}
@@ -209,7 +209,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
    <button onClick={()=>{const k=menu.key;setMenu(null);rename(k);}}><Pencil size={20}/> שינוי שם</button>
    <button onClick={()=>{const k=menu.key;setMenu(null);hide(k);}}><EyeOff size={20}/> הסתר, זה לא כרטיס</button>
   </div></div>}
-  {menuView&&<Viewer f={menuView} onClose={()=>{setMenuView(null);setMenu(null);}}/>}
+  {menuView&&<Viewer fs={menuView} onClose={()=>{setMenuView(null);setMenu(null);}}/>}
   {toast&&<div className="toast" role="status">{toast}</div>}
   {!sel&&<nav className={(navDrag!==null?'dragging':'')+(tab===3&&navDrag===null?' none':'')} style={{['--tab' as string]:navDrag??tab}} aria-label="ניווט" onTouchStart={e=>navSlide(e,false)} onTouchMove={e=>navSlide(e,true)} onTouchEnd={()=>setNavDrag(null)} onTouchCancel={()=>setNavDrag(null)}>{[['אירועים',TicketIcon],['השבוע',CalendarDays],['סיכום',ChartColumn]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
  </main>;}
@@ -245,17 +245,17 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
-function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile|null>(null);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,onClose,onRename,onHide,onCopy}:{t:Ticket;onClose:()=>void;onRename:()=>void;onHide:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
-  {view&&<Viewer f={view} onClose={()=>setView(null)}/>}
+  {view&&<Viewer fs={view} onClose={()=>setView(null)}/>}
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><div className="actions">{typeof navigator!=='undefined'&&'share' in navigator&&<button className="ib" aria-label="שיתוף" onClick={()=>navigator.share({title:t.title,text:[t.title,longDate(t)+(timed(t)?' בשעה '+time(t):''),place(t)].filter(Boolean).join('\n')}).catch(()=>{})}><Share2/></button>}<button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div></div>
   <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2>{bidi(t.title)}</h2>
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
    <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd"><b>{n}</b><span>{u}</span></div>}</div>
   {!t.cancelled&&t.parts&&status(t.parts).some&&<p className="setNote" style={{color:'var(--bad)',textAlign:'center'}}>חלק מההזמנות בוטלו. הכרטיסים והמחיר כאן הם רק של מה שבתוקף.</p>}
-  {t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}</div></div>}
+  {t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{(()=>{const docs=t.files.filter(f=>!/pkpass/i.test(f.type+f.name));return docs.length>1&&<button className="file all" onClick={()=>setView(docs)}><QrCode size={22}/><span>{'הצג הכל ('+nTickets(t)+' כרטיסים)'}</span></button>;})()}{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView([f])}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}</div></div>}
   {t.files.length===0&&t.links.length>0&&<div className="box"><h3><TicketIcon/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.links.map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>{l.label}</span></a>)}</div></div>}
   {w&&<div className="box"><h3><MapPin/>מקום</h3>{t.venue&&<p className="place">{bidi(t.venue)}</p>}{(t.address||t.city)&&<p className="addr">{bidi([t.address,t.city].filter(Boolean).join(', '))}</p>}
    <div className="navLinks"><a className="ghost" href={'https://waze.com/ul?q='+encodeURIComponent(w)+'&navigate=yes'} target="_blank" rel="noopener"><Navigation size={18}/>Waze</a><a className="ghost" href={'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(w)} target="_blank" rel="noopener"><MapIcon size={18}/>מפות</a></div></div>}
@@ -331,24 +331,27 @@ function Summary({list}:{list:Ticket[]}){const slide=useRowSlide();const y=new D
 let pdfjs:Promise<any>|null=null;
 function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' as string).then((lib:any)=>{lib.GlobalWorkerOptions.workerSrc='/pdfjs/pdf.worker.min.mjs';return lib;}).catch(e=>{pdfjs=null;throw e;});return pdfjs;}
 // Save or send the ticket file through the phone's share sheet (a link would leave the home-screen app with no way back).
-async function shareFile(f:TFile){try{const blob=await (await fetch(fileUrl(f))).blob();const file=new File([blob],f.name||'ticket.pdf',{type:blob.type||f.type});
- if(navigator.canShare?.({files:[file]})){await navigator.share({files:[file]});return;}const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),4000);}catch{}}
-// Full-screen ticket viewer with a close button: a home-screen app has no browser back button.
-// PDFs are drawn page by page (pdf.js from this site), images are shown as they are.
-function Viewer({f,onClose}:{f:TFile;onClose:()=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const [zoom,setZoom]=useState('');const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
+// Save or send the ticket files through the phone's share sheet (a link would leave the home-screen app with no way back).
+async function shareFiles(fs:TFile[]){try{const files=await Promise.all(fs.map(async f=>{const blob=await (await fetch(fileUrl(f))).blob();return new File([blob],f.name||'ticket.pdf',{type:blob.type||f.type});}));
+ if(navigator.canShare?.({files})){await navigator.share({files});return;}for(const file of files){const u=URL.createObjectURL(file);const a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),4000);}}catch{}}
+// One ticket file inside the viewer: PDFs drawn page by page (pdf.js from this site), images as they are.
+function Doc({f,onZoom}:{f:TFile;onZoom:(src:string)=>void}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
  useEffect(()=>{if(img){setBusy(false);return;}let off=false;(async()=>{try{
    const res=await fetch(fileUrl(f),{cache:'no-store'});if(!res.ok)throw new Error(res.status===401||res.status===403?'auth':'file');
    const data=await res.arrayBuffer();blob.current=new Blob([data],{type:'application/pdf'});const lib=await pdfLib().catch(()=>null);if(!lib)throw new Error('lib');
    // The worker sometimes fails to start on a phone's first try; one more try, then without a worker.
    const open=(opts:object)=>lib.getDocument({data:data.slice(0),...opts}).promise;let pdf:any;try{pdf=await open({});}catch{try{pdf=await open({});}catch{pdf=await open({disableWorker:true});}}
    for(let n=1;n<=Math.min(pdf.numPages,12)&&!off;n++){const page=await pdf.getPage(n);const w=(box.current?.clientWidth||360)*Math.min(3,devicePixelRatio||2);const vp=page.getViewport({scale:1});const v=page.getViewport({scale:w/vp.width});
-    const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';c.onclick=()=>setZoom(c.toDataURL('image/png'));await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
+    const c=document.createElement('canvas');c.width=v.width;c.height=v.height;c.className='pdfPage';c.onclick=()=>onZoom(c.toDataURL('image/png'));await page.render({canvasContext:c.getContext('2d')!,viewport:v}).promise;box.current?.appendChild(c);}
   }catch(e){const why=e instanceof Error?e.message:'';
    // pdf.js could not draw it: Safari's own PDF view inside the app still shows the ticket.
    if(blob.current&&!off){setFrame(URL.createObjectURL(blob.current));return;}
    setErr(why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
  useEffect(()=>()=>{if(frame)URL.revokeObjectURL(frame);},[frame]);
- return <div className="viewer" role="dialog" aria-label="הכרטיס">{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
-  <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><button className="ib" aria-label="שמירה או שיתוף" onClick={()=>void shareFile(f)}><Share2/></button></div>
-  <div className="viewerBody" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>setZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>
+ return <div className="doc" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&<div className="loader"><Mark cls="lmark" anim="bob"/><p>פותח את הכרטיס…</p></div>}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
+// Full-screen ticket viewer with a close button (a home-screen app has no browser back button): one file, or all of an event's tickets one under the other.
+function Viewer({fs,onClose}:{fs:TFile[];onClose:()=>void}){const [zoom,setZoom]=useState('');
+ return <div className="viewer" role="dialog" aria-label={fs.length>1?'כל הכרטיסים':'הכרטיס'}>{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
+  <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><button className="ib" aria-label="שמירה או שיתוף" onClick={()=>void shareFiles(fs)}><Share2/></button></div>
+  <div className="viewerBody">{fs.map(f=><Doc key={f.msg+f.id} f={f} onZoom={setZoom}/>)}</div>
  </div>;}
