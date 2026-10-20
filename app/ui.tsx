@@ -146,6 +146,22 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  // "שאל את Unstage": questions about your own events, answered by Gemini from the list on the phone.
  const [askOpen,setAskOpen]=useState(false);const [askDraft,setAskDraft]=useState('');const [chat,setChat]=useState<{role:'user'|'model';text:string}[]>([]);const [asking,setAsking]=useState(false);
  const [canListen,setCanListen]=useState(false);useEffect(()=>{const w=window as unknown as {webkitSpeechRecognition?:unknown;SpeechRecognition?:unknown};setCanListen(!!(w.webkitSpeechRecognition||w.SpeechRecognition));},[]);
+ // Tickets that are only a link in the mail (no file): a copy is kept on the server while the link still opens,
+ // so they still show after the seller's link expires and can be sent on to someone. A link that cannot be copied is tried again a day later.
+ const keeping=useRef(false);
+ useEffect(()=>{if(!user||user.id==='demo'||busy||keeping.current)return;
+  const TRY='gate:kept-try:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
+  const todo=store.tickets.filter(t=>upcoming(t)&&!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
+   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key})))
+   .filter(x=>Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
+  if(!todo.length)return;keeping.current=true;
+  void (async()=>{try{for(let i=0;i<todo.length;i+=4){const part=todo.slice(i,i+4);
+    const r=await fetch('/api/keep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:part.map(({msg,url,label,start})=>({msg,url,label,start}))})}).catch(()=>null);
+    const d=r?await r.json().catch(()=>null):null;const got=(d?.kept||[]).filter((k:{file?:TFile})=>k.file) as {url:string;file:TFile}[];
+    // Only a link that could not be copied waits a day before the next try; one already kept comes back at once.
+    for(const x of part)if(!got.some(k=>k.url===x.url))tried[x.url]=Date.now();try{localStorage.setItem(TRY,JSON.stringify(tried));}catch{}if(!got.length)continue;
+    setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const add=got.filter(k=>part.some(x=>x.key===t.key&&x.url===k.url)).map(k=>k.file).filter(f=>!t.files.some(g=>g.id===f.id));return add.length?{...t,files:[...t.files,...add]}:t;})};save(KEY(user.id),n);return n;});}}
+   finally{keeping.current=false;}})();},[user,busy,store.tickets]);
  // Back in the app after the connection dropped mid-scan: carry on by itself (what was read is kept).
  useEffect(()=>{if(!err.startsWith('החיבור נקטע'))return;const on=()=>{if(document.visibilityState==='visible')void scan();};document.addEventListener('visibilitychange',on);return()=>document.removeEventListener('visibilitychange',on);},[err,scan]);
  // Voice, as in Unbox: the mic lights while listening, a second tap stops it, it stops by itself after 10 seconds (iOS sometimes never ends it).
@@ -377,8 +393,8 @@ function pdfLib(){pdfjs??=import(/* webpackIgnore: true */ '/pdfjs/pdf.min.mjs' 
 async function shareFiles(fs:TFile[]){try{const files=await Promise.all(fs.map(async f=>{const blob=await (await fetch(fileUrl(f))).blob();return new File([blob],f.name||'ticket.pdf',{type:blob.type||f.type});}));
  if(navigator.canShare?.({files})){await navigator.share({files});return;}for(const file of files){const u=URL.createObjectURL(file);const a=document.createElement('a');a.href=u;a.download=file.name;a.click();setTimeout(()=>URL.revokeObjectURL(u),4000);}}catch{}}
 // One ticket file inside the viewer: PDFs drawn page by page (pdf.js from this site), images as they are.
-function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boolean}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
- useEffect(()=>{if(img){setBusy(false);return;}let off=false;(async()=>{try{
+function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boolean}){const box=useRef<HTMLDivElement>(null);const [err,setErr]=useState('');const [busy,setBusy]=useState(true);const img=/image/.test(f.type);const page=/html/.test(f.type);const blob=useRef<Blob|null>(null);const [frame,setFrame]=useState('');
+ useEffect(()=>{if(img||page){setBusy(false);return;}let off=false;(async()=>{try{
    const res=await fetch(fileUrl(f),{cache:'no-store'});if(!res.ok)throw new Error(res.status===401||res.status===403?'auth':'file');
    const data=await res.arrayBuffer();blob.current=new Blob([data],{type:'application/pdf'});const lib=await pdfLib().catch(()=>null);if(!lib)throw new Error('lib');
    // The worker sometimes fails to start on a phone's first try; one more try, then without a worker.
@@ -388,9 +404,9 @@ function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boo
   }catch(e){const why=e instanceof Error?e.message:'';
    // pdf.js could not draw it: Safari's own PDF view inside the app still shows the ticket.
    if(blob.current&&!off){setFrame(URL.createObjectURL(blob.current));return;}
-   setErr(why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img]);
+   setErr(why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img,page]);
  useEffect(()=>()=>{if(frame)URL.revokeObjectURL(frame);},[frame]);
- return <div className="doc" ref={box}>{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&(first?<div className="loader"><Mark cls="lmark" anim="bob"/><p>{'פותח את הכרטיס…'}</p></div>:<div className="docWait" aria-hidden="true"/>)}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
+ return <div className="doc" ref={box}>{page&&<iframe className="pdfFrame keptPage" src={fileUrl(f)} title="הכרטיס" sandbox=""/>}{img&&<img src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&(first?<div className="loader"><Mark cls="lmark" anim="bob"/><p>{'פותח את הכרטיס…'}</p></div>:<div className="docWait" aria-hidden="true"/>)}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
 // Full-screen ticket viewer with a close button (a home-screen app has no browser back button): one file, or all of an event's tickets one under the other.
 function Viewer({fs,onClose}:{fs:TFile[];onClose:()=>void}){const [zoom,setZoom]=useState('');
  return <div className="viewer" role="dialog" aria-label={fs.length>1?'כל הכרטיסים':'הכרטיס'}>{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
