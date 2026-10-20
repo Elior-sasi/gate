@@ -92,3 +92,16 @@ test('offline: the next two weeks are fetched ahead, a replaced ticket is not ke
  assert.deepEqual(p.fetch.map(x=>x.id),['new']);assert.deepEqual(p.keep.map(x=>x.id).sort(),['cx','far','new','past']);});
 test('sign out clears this account from the phone (the text size setting stays)',()=>{
  assert.deepEqual(personalKeys(['gate:v11:123','gate:hidden:123','gate:names:123','gate:kept-try:123','unstage:size','other']),['gate:v11:123','gate:hidden:123','gate:names:123','gate:kept-try:123']);});
+import {parseTicketSms,matchSms} from '@/lib/sms';
+test('a ticket by SMS: the link and its number are read, and it joins the right order (209803927955490 → 20980-39279-55490)',()=>{
+ const s=parseTicketSms('מצורפים הכרטיסים שהזמנת\n להקרנת הסרט: טארה סטרונג - מאסטרקלאס, \nניתן לגשת ישירות לכניסה לאולם.\nצפייה מהנה! סינמטק ירושלים. https://prestickets.com/jer-cin/3c603657-1dcb-4c2d-b007-e37c98a21729/?id=209803927955490')!;
+ assert.equal(s.url,'https://prestickets.com/jer-cin/3c603657-1dcb-4c2d-b007-e37c98a21729/?id=209803927955490');assert.equal(s.ref,'209803927955490');assert.equal(s.title,'טארה סטרונג - מאסטרקלאס');
+ const tara=mail({msgs:['j1'],mailed:D(1),title:'טארה סטרונג - מאסטרקלאס',start:'2026-11-03T17:00',order:'16320-39278-74340',seats:['שורה 1, כיסא 5']});
+ const tara2=mail({msgs:['j2'],mailed:D(1),title:'טארה סטרונג - מאסטרקלאס',start:'2026-11-03T17:00',order:'20980-39279-55490',seats:['שורה 1, כיסא 2']});
+ const ev=mergeAll([],[tara,tara2]);const m=matchSms([...ev,two],s);assert.equal(m?.event.title,'טארה סטרונג - מאסטרקלאס');assert.equal(m?.order,'20980-39279-55490');
+ assert.equal(parseTicketSms('קוד האימות שלך הוא 1234'),null);assert.equal(parseTicketSms('כרטיס http://127.0.0.1/x'),null);});
+test('an SMS ticket for an order replaces that order\'s old file, and a later scan keeps it that way',()=>{
+ const t={...mergeAll([],[two])[0]};const sms={msg:'sms'+D(3),id:'k_abcdefghijklmnop',name:'כרטיס.html',type:'text/html',size:10,at:D(3),order:'A100'};
+ const withSms={...t,files:[...t.files.map(f=>({...f,stale:true})),sms]};
+ const again=mergeAll([withSms],[mail({msgs:['m1'],mailed:D(1),order:'A100',seats:['שורה 5, כיסא 12','שורה 5, כיסא 13'],files:[pdf('m1','f1')]})])[0];
+ assert.deepEqual(current(again).map(f=>f.id),['k_abcdefghijklmnop']);});

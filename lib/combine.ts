@@ -54,10 +54,10 @@ function pick<V>(a:{v?:V;at:number;ai?:boolean},b:{v?:V;at:number;ai?:boolean},s
  return b.at>a.at||(b.at===a.at&&b.ai&&!a.ai)?b:a;}
 const day=(s:string)=>s.slice(0,10);
 // A file is replaced when a newer mail about the same order (or the event, with no order) brings a ticket of its own and says it is a change or a replacement,
-// or brings different seats for that order. The old file stays known (so it is not fetched again) but is never shown.
+// or brings different seats for that order, or a ticket for that order came by SMS (lib/sms). The old file stays known (so it is not fetched again) but is never shown.
 function freshFiles(files:TFile[],parts:Record<string,Part>){const partOf=(f:TFile)=>parts['m:'+f.msg];
  return files.map(f=>{const p=partOf(f);const o=f.order?norm(f.order):'';
-  const newer=files.some(g=>g!==f&&(g.at||0)>(f.at||0)&&(!o||!g.order||norm(g.order)===o)&&(partOf(g)?.update||(o&&g.order&&partOf(g)&&p&&cleanSeats(partOf(g)!.seats||[]).join('|')!==cleanSeats(p.seats||[]).join('|')&&(partOf(g)!.seats||[]).length>0)));
+  const newer=files.some(g=>g!==f&&(g.at||0)>(f.at||0)&&(!o||!g.order||norm(g.order)===o)&&(partOf(g)?.update||(g.msg.startsWith('sms')&&!!o&&!!g.order&&norm(g.order)===o)||(o&&g.order&&partOf(g)&&p&&cleanSeats(partOf(g)!.seats||[]).join('|')!==cleanSeats(p.seats||[]).join('|')&&(partOf(g)!.seats||[]).length>0)));
   return newer?{...f,stale:true}:f.stale?{...f,stale:false}:f;});}
 export function combine(o:Ticket,t:Ticket):Ticket{
  // The purchase mail (it has the date) describes the event; a short cancellation notice only marks it.

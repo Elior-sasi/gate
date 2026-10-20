@@ -13,7 +13,7 @@ const keep=(l:Ticket[])=>l.filter(t=>t&&typeof t.key==='string'&&typeof t.start=
 export async function GET(req:NextRequest){if(!dbOn())return Response.json({enabled:false},{headers:H});
  try{const u=await pushIdentity(req);const {sql,ready}=db();await ready;const row=(await sql`select subs,checked_at from gate_users where user_id=${u.id}`)[0];
   const base=req.nextUrl.origin;return Response.json({enabled:true,publicKey:vapid().publicKey,devices:(row?.subs as Sub[]|undefined)?.length||0,checkedAt:row?.checked_at||null,
-   calendar:base.replace(/^https/,'webcal')+'/api/calendar?t='+token(u.id,'calendar'),widget:base+'/api/widget?t='+token(u.id,'widget')},{headers:H});
+   calendar:base.replace(/^https/,'webcal')+'/api/calendar?t='+token(u.id,'calendar'),widget:base+'/api/widget?t='+token(u.id,'widget'),sms:base+'/api/sms/in?t='+token(u.id,'sms')},{headers:H});
  }catch{return Response.json({enabled:true,publicKey:vapid().publicKey},{headers:H});}}
 // Saves the phone's tickets (and device, when turning notifications on) as the server copy.
 export async function POST(req:NextRequest){

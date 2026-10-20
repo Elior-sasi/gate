@@ -8,6 +8,7 @@ import {sellerCancel,contacts,LAW} from '@/lib/sellers';
 import {navQuery,navLinks} from '@/lib/place';
 import {offlinePlan,personalKeys} from '@/lib/offline';
 import {fixKind} from '@/lib/kind';
+import {matchSms,type SmsTicket} from '@/lib/sms';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
 const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},other:{label:'אירוע',Icon:TicketIcon}};
@@ -141,7 +142,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  function navSlide(e:React.TouchEvent<HTMLElement>,moving:boolean){const r=e.currentTarget.getBoundingClientRect();const x=e.touches[0]?.clientX;if(x===undefined)return;
   const pos=Math.min(2,Math.max(0,(r.right-x)/(r.width/3)-0.5));if(!moving){setNavDrag(null);return;}setNavDrag(pos);const t=Math.round(pos);if(t!==tab){setTab(t);setOpen(null);}}
  // The server copy (for reminders, the subscribed calendar and the widget) and phone notifications.
- type Srv={enabled:boolean;publicKey?:string;devices?:number;calendar?:string;widget?:string};
+ type Srv={enabled:boolean;publicKey?:string;devices?:number;calendar?:string;widget?:string;sms?:string};
  const [srv,setSrv]=useState<Srv|null>(null);const [push,setPush]=useState<'checking'|'install'|'unsupported'|'denied'|'off'|'on'|'busy'>('checking');const [pushMsg,setPushMsg]=useState('');
  useEffect(()=>{if(!user||user.id==='demo')return;void (async()=>{const s:Srv=await fetch('/api/push',{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false}));setSrv(s);
   const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||(navigator as {standalone?:boolean}).standalone===true;
@@ -177,6 +178,22 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
     for(const x of part)if(!got.some(k=>k.url===x.url))tried[x.url]=Date.now();try{localStorage.setItem(TRY,JSON.stringify(tried));}catch{}if(!got.length)continue;
     setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const add=got.filter(k=>part.some(x=>x.key===t.key&&x.url===k.url)).map(k=>k.file).filter(f=>!t.files.some(g=>g.id===f.id));return add.length?{...t,files:[...t.files,...add]}:t;})};save(KEY(user.id),n);return n;});}}
    finally{keeping.current=false;}})();},[user,busy,store.tickets]);
+ // Tickets that came by SMS (forwarded by the iPhone Shortcut, or pasted): the kept copy is added to its event as the newest ticket of that order.
+ // One that matches no event yet waits on the phone until a scan brings the event.
+ const SMS=(u:string)=>'gate:sms:'+u;const [smsLast,setSmsLast]=useState<{at:string;kind:string}|null>(null);
+ const pullSms=useCallback(async()=>{if(!user||user.id==='demo'||!navigator.onLine)return;let got:(SmsTicket&{file?:TFile|null;at:string})[]=[];
+  try{const r=await fetch('/api/sms',{cache:'no-store'});if(r.ok){const d=await r.json();got=d.items||[];setSmsLast(d.last||null);}}catch{}
+  const waiting=[...load(SMS(user.id),[] as typeof got),...got].filter(x=>x.url&&Date.now()-new Date(x.at).getTime()<60*864e5);if(!waiting.length)return;
+  const left:typeof got=[];let added='';
+  setStore(s=>{let tickets=s.tickets;for(const x of waiting){const m=matchSms(tickets,x);if(!m){left.push(x);continue;}
+    // The page could not be copied (built by scripts, or it asked to sign in): the SMS link itself is added to the event instead.
+    if(!x.file){tickets=tickets.map(t=>t.key!==m.event.key||t.links.some(l=>l.url===x.url)?t:{...t,links:[{label:'הכרטיס מ-SMS',url:x.url},...t.links].slice(0,5)});added=m.event.title;continue;}
+    const at=new Date(x.at).getTime();const f:TFile={...x.file,msg:'sms'+at,at,...(m.order?{order:m.order}:{})};
+    // Same order: the SMS ticket is the newer one, so the older file of that order steps aside (it stays known, not shown).
+    tickets=tickets.map(t=>t.key!==m.event.key||t.files.some(g=>g.id===f.id)?t:{...t,files:[...t.files.map(g=>m.order&&g.order===m.order&&!/pkpass/i.test(g.type+g.name)?{...g,stale:true}:g),f]});added=m.event.title;}
+   const n={...s,tickets};save(KEY(user.id),n);return n;});
+  save(SMS(user.id),left);if(added)say('כרטיס מ-SMS נוסף ל'+added);},[user]);
+ useEffect(()=>{if(ready&&!busy)void pullSms();},[ready,busy,pullSms]);
  // Back in the app after the connection dropped mid-scan: carry on by itself (what was read is kept).
  useEffect(()=>{if(!err.startsWith('החיבור נקטע'))return;const on=()=>{if(document.visibilityState==='visible')void scan();};document.addEventListener('visibilitychange',on);return()=>document.removeEventListener('visibilitychange',on);},[err,scan]);
  // Voice, as in Unbox: the mic lights while listening, a second tap stops it, it stops by itself after 10 seconds (iOS sometimes never ends it).
@@ -255,7 +272,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
      {!rest.length&&!showHero&&<section className="panel empty">{tab===1?<CalendarDays size={40}/>:filt==='past'?<History size={40}/>:<TicketIcon size={40}/>}<h2>{q?'לא נמצאו אירועים':tab===1?'אין אירועים השבוע':filt==='past'?'עוד אין אירועים שהיו':filt==='cx'?'אין אירועים שבוטלו':'אין אירועים קרובים'}</h2><p>{q?'נסה מילה אחרת.':'כרטיסים חדשים יופיעו כאן לבד.'}</p></section>}</>;})()}</>}
   </>}
   {tab===2&&<Summary list={visible}/>}
-  {tab===3&&<SettingsView size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
+  {tab===3&&<SettingsView smsLast={smsLast} onSmsPasted={()=>void pullSms()} size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
   {sel&&<Sheet t={sel} saved={saved.has(sel.key)} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onMarkCx={()=>markCx(sel.key)} onCopy={()=>say('הועתק')}/>}
   {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
    <div className="askHead"><h3><Sparkles size={19}/>שאל את Unstage</h3><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
@@ -323,6 +340,20 @@ function Gift({t,me,onClose}:{t:Ticket;me:string;onClose:()=>void}){const docs=t
   {url&&<button className="ghost" style={{marginTop:8}} onClick={()=>{void navigator.clipboard?.writeText(url);setMsg('הקישור הועתק');}}><Copy size={18}/>העתקת הקישור</button>}
   {msg&&<p className="setNote" role="status" style={{textAlign:'center'}}>{msg}</p>}
  </div></div>;}
+// Tickets by SMS, as Unbox does it: an iPhone Shortcut forwards every message with "כרטיס" to the personal link. A message can also be pasted here.
+function SmsSet({link,last,onCopy,onPasted}:{link:string;last:{at:string;kind:string}|null;onCopy:(t:string)=>void;onPasted:()=>void}){const [text,setText]=useState('');const [msg,setMsg]=useState('');const [busy,setBusy]=useState(false);
+ const paste=async()=>{if(!text.trim())return;setBusy(true);setMsg('');try{const r=await fetch(link,{method:'POST',headers:{'Content-Type':'text/plain'},body:text});const d=await r.json().catch(()=>({}));
+   setMsg(!d.ticket?'לא מצאתי בהודעה קישור לכרטיס.':d.kept?'הכרטיס נשמר ✓':'קיבלתי את ההודעה, אבל לא הצלחתי לפתוח את הקישור לכרטיס.');if(d.ticket){setText('');onPasted();}}catch{setMsg('לא הצלחתי לשלוח. נסה שוב.');}finally{setBusy(false);}};
+ return <div className="set"><h3><Smartphone size={18}/>כרטיסים מ-SMS</h3>
+  <p className="setNote">יש מקומות ששולחים את הכרטיס ב-SMS ולא במייל, כמו הסינמטק. הכרטיס נשמר ומצטרף לאירוע שלו. מגדירים פעם אחת באפליקציית קיצורי הדרך:</p>
+  <ol className="steps2"><li>קיצורים ← אוטומציה ← אוטומציה חדשה ← <b>הודעה</b>.</li><li>"ההודעה מכילה": <b>כרטיס</b>. בחר <b>הרץ מיד</b>.</li><li>פעולה: <b>קבל תוכן של URL</b>. בכתובת הדבק את הקישור האישי, שיטה <b>POST</b>, גוף בקשה <b>טקסט</b> = תוכן ההודעה.</li></ol>
+  <button className="ghost" onClick={()=>onCopy(link)}><Copy size={18}/>העתקת הקישור האישי</button>
+  <p className="setNote" role="status">{last?'הודעה אחרונה הגיעה ב־'+new Date(last.at).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(last.kind==='ticket'?' וזוהתה ככרטיס ✓':last.kind==='empty'?', אבל בלי טקסט':', אבל לא נמצא בה קישור לכרטיס'):'עדיין לא הגיעה אף הודעה מהקיצור.'}</p>
+  <label className="setNote" htmlFor="smsPaste" style={{display:'block',marginTop:10}}>או הדבק כאן הודעה עם כרטיס:</label>
+  <textarea id="smsPaste" className="smsBox" rows={3} value={text} onChange={e=>setText(e.target.value)} placeholder="מצורפים הכרטיסים שהזמנת…"/>
+  <button className="ghost" disabled={busy||!text.trim()} onClick={paste}><Send size={18}/>{busy?'שומר…':'הוספת הכרטיס'}</button>
+  {msg&&<p className="setNote" role="status">{msg}</p>}
+  <p className="setNote">הקישור אישי. אל תשתף אותו.</p></div>;}
 type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
  return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press} aria-label={t.title+', '+longDate(t)}><div className="c">
@@ -342,7 +373,7 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy}:{t:Ticket&{m
    <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd"><b>{n}</b><span>{u}</span></div>}</div>
   {!t.cancelled&&t.parts&&status(t.parts).some&&<p className="setNote" style={{color:'var(--bad)',textAlign:'center'}}>חלק מההזמנות בוטלו. הכרטיסים והמחיר כאן הם רק של מה שבתוקף.</p>}
   {t.cancelled&&<div className="box"><p className="setNote" style={{margin:0,color:'var(--bad)'}}>ההזמנה בוטלה, והכרטיסים שלה כבר לא בתוקף.</p></div>}
-  {!t.cancelled&&t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{(()=>{const docs=t.files.filter(f=>!/pkpass/i.test(f.type+f.name));return docs.length>1&&<button className="file all" onClick={()=>setView(docs)}><QrCode size={22}/><span>{'הצג הכל ('+nTickets(t)+' כרטיסים)'}</span></button>;})()}{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView([f])}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}</div></div>}
+  {!t.cancelled&&t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{(()=>{const docs=t.files.filter(f=>!/pkpass/i.test(f.type+f.name));return docs.length>1&&<button className="file all" onClick={()=>setView(docs)}><QrCode size={22}/><span>{'הצג הכל ('+nTickets(t)+' כרטיסים)'}</span></button>;})()}{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView([f])}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}{t.links.filter(l=>l.label==='הכרטיס מ-SMS').map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>הכרטיס מ-SMS</span></a>)}</div></div>}
   {!t.cancelled&&t.files.length===0&&t.links.length>0&&<div className="box"><h3><TicketIcon/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{t.links.map((l,i,a)=>{// Several orders' links all say "לחצו כאן לקבלת הכרטיסים": each says how many tickets it opens and which seats.
    const same=a.filter(x=>x.label===l.label).length>1;const p=l.msg?t.parts?.['m:'+l.msg]:undefined;const seats=p?cleanSeats(p.seats||[]):[];const n=p?Math.max(p.count||0,seats.length,1):0;
    return <a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>{same?(n?(n>1?n+' כרטיסים':'כרטיס'):'הכרטיסים '+(i+1)):l.label}</span>{same&&seats.length>0&&<small>{seatShort(seats)}</small>}</a>;})}</div></div>}
@@ -370,8 +401,8 @@ const r=await new Request(u).loadJSON().catch(()=>null)
 const code=await new Request(u+'&js=1').loadString().catch(()=>'')
 const AF=Object.getPrototypeOf(async function(){}).constructor
 if(code&&code.includes('ListWidget')){await new AF('r',code)(r)}else{const w=new ListWidget();w.backgroundColor=new Color('#0a0f14');const t=w.addText(r&&r.lines?r.lines.map(x=>x.t).join('\\n'):'אין נתונים כרגע');t.textColor=Color.white();t.font=Font.boldSystemFont(15);if(config.runsInWidget)Script.setWidget(w);else await w.presentSmall();Script.complete()}`;
-type SrvProps={srv:{enabled:boolean;devices?:number;calendar?:string;widget?:string}|null;push:string;pushMsg:string;onPush:()=>void;onTest:()=>void;onCopy:(t:string)=>void};
-function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan,size,onSize}:{user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void;size:number;onSize:(i:number)=>void}&SrvProps){
+type SrvProps={srv:{enabled:boolean;devices?:number;calendar?:string;widget?:string;sms?:string}|null;push:string;pushMsg:string;onPush:()=>void;onTest:()=>void;onCopy:(t:string)=>void};
+function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan,size,onSize,smsLast,onSmsPasted}:{smsLast:{at:string;kind:string}|null;onSmsPasted:()=>void;user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void;size:number;onSize:(i:number)=>void}&SrvProps){
  const noDb=srv&&!srv.enabled;
  const slideSize=useRowSlide();const speakUrl=srv?.widget?.replace('/api/widget','/api/speak');
  return <><div className="settings">
@@ -389,6 +420,7 @@ function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,on
    <p className="setNote">כל האירועים מופיעים ביומן של הטלפון, עם תזכורת שעתיים לפני. כרטיס חדש נכנס ליומן בעצמו.</p>
    <a className="primary" href={srv.calendar}><CalendarPlus size={18}/>הוספה ליומן של האייפון</a>
    <button className="ghost" onClick={()=>onCopy(srv.calendar!.replace(/^webcal/,'https'))}><Copy size={18}/>העתקת הקישור (ל-Google Calendar)</button></div>}
+  {srv?.sms&&<SmsSet link={srv.sms} last={smsLast} onCopy={onCopy} onPasted={onSmsPasted}/>}
   {srv?.widget&&<div className="set"><h3><Smartphone size={18}/>ווידג'ט למסך הבית ולמסך הנעילה</h3>
    <p className="setNote">מראה את האירוע הבא ומה אחריו. עובד דרך אפליקציית <b>Scriptable</b> (חינם ב-App Store).</p>
    <ol className="steps2"><li>העתק את הסקריפט.</li><li>ב-Scriptable: <b>+</b>, הדבק ושמור בשם <b>Unstage</b>.</li><li>במסך הבית: לחיצה ארוכה ← <b>+</b> ← Scriptable ← גודל בינוני. בהגדרות הווידג'ט בחר את הסקריפט <b>Unstage</b>.</li><li>גם למסך הנעילה: התאמה אישית ← מסך נעילה ← Scriptable, ובחר <b>Unstage</b>.</li></ol>
