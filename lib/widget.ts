@@ -29,7 +29,7 @@ const img=await new Request('https://gatetickets.vercel.app/wordmark.png?v=2').l
 if(img){const i=w.addImage(img);i.imageSize=new Size(img.size.width*22/img.size.height,22);i.rightAlignImage()}else{const t=w.addText('Unstage');t.font=Font.boldSystemFont(16);t.textColor=new Color('#ffd27a')}
 w.addSpacer(8)
 const F={big:22,mid:17,small:13},C={white:'#ffffff',gold:'#ffb547',light:'#ffd79a',gray:'#a89c8a'}
-function put(st,x,i){if(i&&x.s!=='small')st.addSpacer(2);else if(i)st.addSpacer(2);const t=st.addText(x.t);t.font=x.s==='small'?Font.mediumSystemFont(F.small):Font.boldSystemFont(F[x.s]||15);t.textColor=new Color(C[x.c]||'#ffffff');t.lineLimit=x.n||1;t.minimumScaleFactor=0.75;t.rightAlignText()}
+function put(st,x,i){if(i&&x.s!=='small')st.addSpacer(2);else if(i)st.addSpacer(2);const t=st.addText(x.t);t.font=x.s==='small'?Font.mediumSystemFont(F.small):Font.boldSystemFont(F[x.s]||15);t.textColor=new Color(C[x.c]||'#ffffff');t.lineLimit=x.n||1;t.minimumScaleFactor=0.75}
 // Countdown bar: the 7 days before the event, filled from the right as it gets closer.
 function bar(width,done){const n=7,gap=4,h=6,sc=3;const ctx=new DrawContext();ctx.opaque=false;ctx.respectScreenScale=false;ctx.size=new Size(width*sc,h*sc);const sw=(width-gap*(n-1))/n
  for(let k=0;k<n;k++){const x=(width-(k+1)*sw-k*gap)*sc;const p=new Path();p.addRoundedRect(new Rect(x,0,sw*sc,h*sc),h*sc/2,h*sc/2);ctx.addPath(p);ctx.setFillColor(k<done?new Color('#ffb547'):new Color('#ffffff',0.13));ctx.fillPath()}
