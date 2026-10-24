@@ -188,7 +188,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  const SMS=(u:string)=>'gate:sms:'+u;const [smsLast,setSmsLast]=useState<{at:string;kind:string;shape?:string;raw?:number}|null>(null);
  const pullSms=useCallback(async()=>{if(!user||user.id==='demo'||!navigator.onLine)return;let got:(SmsTicket&{file?:TFile|null;at:string;info?:PresInfo})[]=[];
   try{const r=await fetch('/api/sms',{cache:'no-store'});if(r.ok){const d=await r.json();got=d.items||[];setSmsLast(d.last||null);}}catch{}
-  const waiting=[...load(SMS(user.id),[] as typeof got),...got].filter((x,i,a)=>x.url&&Date.now()-new Date(x.at).getTime()<60*864e5&&a.findIndex(y=>y.url===x.url&&y.at===x.at)===i);if(!waiting.length)return;
+  const waiting=[...got,...load(SMS(user.id),[] as typeof got)].filter((x,i,a)=>x.url&&Date.now()-new Date(x.at).getTime()<60*864e5&&a.findIndex(y=>y.url===x.url&&y.at===x.at)===i);if(!waiting.length)return;
   // Kept on the phone (the server hands each message over once) and applied again on every pull: adding is idempotent,
   // so a ticket survives a scan that was running meanwhile, or a full rescan.
   save(SMS(user.id),waiting.slice(-30));const fix=(x:typeof got[number])=>x.info?.order&&!x.ref?{...x,ref:x.info.order}:x;
@@ -200,7 +200,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
     // Same order: the SMS ticket is the newer one, so the older file of that order steps aside (it stays known, not shown),
     // and its seats (read from the ticket itself) replace that order's seats. The bare SMS link, if added before, goes.
     tickets=tickets.map(t=>{if(t.key!==m.event.key||t.files.some(g=>g.id===f.id))return t;
-     let n:Ticket={...t,links:t.links.filter(l=>l.url!==x.url),files:[...t.files.map(g=>m.order&&g.order===m.order&&!/pkpass/i.test(g.type+g.name)?{...g,stale:true}:g),f]};
+     let n:Ticket={...t,links:t.links.filter(l=>l.url!==x.url),files:[...t.files.filter(g=>g.msg!==f.msg).map(g=>m.order&&g.order===m.order&&!/pkpass/i.test(g.type+g.name)?{...g,stale:true}:g),f]};
      if(x.info&&x.info.seats.length)n=withSms(n,'m:'+f.msg,at,{...x.info,order:m.order||x.info.order});return n;});}
    const n={...s,tickets};save(KEY(user.id),n);return n;});
   if(added)say('כרטיס מ-SMS נוסף ל'+added);},[user]);

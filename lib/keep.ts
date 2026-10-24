@@ -14,7 +14,7 @@ export const keyOf=(url:string)=>createHash('sha256').update(url).digest('base64
 export async function snapshot(url:string,label:string):Promise<Kept|null>{
  if(!/^https?:\/\//i.test(url))return null;
  // Pages built by scripts that have a known data source: the ticket is drawn from the data (lib/pres).
- if(presApi(url)){const p=await presTicket(url).catch(()=>null);return p?{type:'text/html',data:Buffer.from(p.html,'utf8').toString('base64'),name:label+'.html',info:p.info}:null;}
+ if(presApi(url)){const p=await presTicket(url).catch(()=>null);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
  const g=await grab(url);
  if(g.type==='application/pdf'||/^image\/(png|jpe?g|gif|webp)$/.test(g.type))return {type:g.type,data:g.buf.toString('base64'),name:label+(g.type==='application/pdf'?'.pdf':'.png')};
  if(!/html/.test(g.type))return null;

@@ -21,21 +21,28 @@ export function presInfo(doc:{tickets?:T[];reservationIsCancelled?:boolean}):Pre
  const start=(a.presentationDateTime||'').match(/^(\d{4}-\d\d-\d\d)[ T](\d\d:\d\d)/);
  return {title:a.featureName||undefined,start:start?start[1]+'T'+start[2]:undefined,hall:a.venueName||undefined,venue:a.locationHeader1||undefined,address:a.locationSubheader1||undefined,
   order:a.reservationIdentifierFormatted||a.reservationIdentifier||undefined,seats,count:ts.length,price:sum&&!a.hideTicketPrice?'₪ '+sum:undefined,...(doc.reservationIsCancelled?{cancelled:true}:{})};}
-export async function presTicket(url:string):Promise<{html:string;info:PresInfo}|null>{const api=presApi(url);if(!api)return null;
+// One card per ticket, like the cinema's own printed ticket (QR on the left, the details on the right, row and seat in boxes),
+// drawn as one picture so the viewer shows it like the other tickets, with nothing to scroll inside.
+async function qr(s:string,x:number,y:number,size:number){const v=await QRCode.toString(s,{type:'svg',margin:0,errorCorrectionLevel:'M',color:{dark:'#000000',light:'#ffffff'}});
+ const vb=v.match(/viewBox="([^"]+)"/)?.[1]||'0 0 1 1';const inner=v.replace(/^[\s\S]*?<svg[^>]*>/,'').replace(/<\/svg>\s*$/,'');
+ return `<rect x="${x-8}" y="${y-8}" width="${size+16}" height="${size+16}" fill="#fff"/><svg x="${x}" y="${y}" width="${size}" height="${size}" viewBox="${vb}" shape-rendering="crispEdges">${inner}</svg>`;}
+export async function presSvg(info:PresInfo,ts:T[]):Promise<string>{const W=640,H=330,G=24;
+ const d=info.start?new Date(info.start+':00Z'):null;const DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+ const when=d?'יום '+DAYS[d.getUTCDay()]+' '+d.getUTCDate()+'/'+(d.getUTCMonth()+1)+'/'+d.getUTCFullYear()+'  '+info.start!.slice(11,16):'';
+ const T=(x:number,y:number,size:number,txt:string,weight=400,fill='#111',anchor='start')=>`<text x="${x}" y="${y}" font-size="${size}" font-weight="${weight}" fill="${fill}" direction="rtl" text-anchor="${anchor}">${esc(txt)}</text>`;
+ const cards=await Promise.all(ts.map(async(t,i)=>{const y0=i*(H+G);const R=W-28;let g=`<g transform="translate(0 ${y0})"><rect x="0" y="0" width="${W}" height="${H}" rx="26" fill="#fff"/>`;
+  g+=T(R,52,26,info.title||'',700);
+  g+=T(R,88,19,[t.displayName||t.ticketName,t.amount&&!t.hideTicketPrice?'₪'+t.amount:''].filter(Boolean).join(' · '),400,'#333');
+  g+=T(R,128,23,when,700);g+=T(R,164,22,[info.hall,info.venue&&info.venue!==info.hall?info.venue:''].filter(Boolean).join(' · '),700);
+  if(t.row&&t.seat){const bx=R-250;g+=`<rect x="${bx}" y="186" width="250" height="78" fill="none" stroke="#111" stroke-width="2"/><line x1="${bx+125}" y1="186" x2="${bx+125}" y2="264" stroke="#111" stroke-width="2"/>`;
+   g+=T(R-14,210,15,'שורה',400,'#444')+T(R-62,252,30,t.row,700,'#111','middle')+T(R-139,210,15,'מושב',400,'#444')+T(R-187,252,30,t.seat,700,'#111','middle');}
+  g+=T(R,302,15,'הזמנה '+(info.order||'')+'  ·  כרטיס '+(i+1)+' מתוך '+ts.length,400,'#555');
+  if(t.barcode){g+=await qr(t.barcode,34,58,190);g+=`<text x="129" y="282" font-size="12" fill="#666" text-anchor="middle" font-family="ui-monospace,monospace">${esc(t.barcode)}</text>`;}
+  return g+'</g>';}));
+ const h=ts.length*(H+G)-G;
+ return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${h}" width="${W}" height="${h}" font-family="-apple-system,system-ui,Arial,sans-serif">${cards.join('')}</svg>`;}
+export async function presTicket(url:string):Promise<{svg:string;info:PresInfo}|null>{const api=presApi(url);if(!api)return null;
  const r=await fetch(api+'&_='+Date.now(),{headers:{'User-Agent':UA,Accept:'application/json','Accept-Language':'he-IL,he;q=0.9'},signal:AbortSignal.timeout(12000)});
  if(!r.ok)return null;const j=await r.json().catch(()=>null) as {document?:{tickets?:T[];reservationIsCancelled?:boolean}}|null;const doc=j?.document;if(!doc)return null;
  const info=presInfo(doc);if(!info)return null;const ts=(doc.tickets||[]).filter(t=>t&&(t.barcode||t.reservationIdentifier));
- const when=info.start?new Date(info.start+':00Z').toLocaleString('he-IL',{weekday:'long',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'UTC'}):'';
- const whole=ts[0].reservationIdentifier?await svg('R.'+ts[0].reservationIdentifier):'';
- const cards=await Promise.all(ts.map(async(t,i)=>`<section class="t"><div class="n">כרטיס ${i+1} מתוך ${ts.length}</div>`+
-  (t.row&&t.seat?`<div class="s">שורה <b>${esc(t.row)}</b> · כיסא <b>${esc(t.seat)}</b></div>`:'')+
-  `<div class="k">${esc(t.displayName||t.ticketName||'')}${t.amount&&!t.hideTicketPrice?' · ₪'+esc(t.amount):''}</div>`+
-  (t.barcode?`<div class="q">${await svg(t.barcode)}</div><div class="b">${esc(t.barcode)}</div>`:'')+`</section>`));
- const html=`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(info.title)}</title><style>
-body{margin:0;background:#f4f4f4;color:#111;font:16px/1.4 -apple-system,system-ui,sans-serif}main{max-width:460px;margin:0 auto;padding:16px}
-h1{font-size:22px;margin:4px 0 6px}.m{color:#444;margin:2px 0}.o{margin:10px 0 14px;font-size:14px;color:#555}
-.t,.w{background:#fff;border-radius:14px;padding:16px;margin:0 0 14px;text-align:center;box-shadow:0 1px 3px #0002}.n{font-size:13px;color:#666}.s{font-size:20px;margin:6px 0}.k{color:#555;font-size:14px}
-.q svg{width:230px;height:230px;margin:10px auto 2px;display:block}.b{font:12px ui-monospace,monospace;color:#777;direction:ltr}.w .q svg{width:170px;height:170px}.x{color:#b00;font-weight:700}
-</style></head><body><main><h1>${esc(info.title)}</h1>${when?`<div class="m">${esc(when)}</div>`:''}<div class="m">${esc([info.venue,info.hall].filter(Boolean).join(' · '))}</div>${info.address?`<div class="m">${esc(info.address)}</div>`:''}
-${info.cancelled?'<p class="x">ההזמנה בוטלה</p>':''}<div class="o">הזמנה ${esc(info.order)}</div>${cards.join('')}${whole&&ts.length>1?`<section class="w"><div class="n">כל ההזמנה</div><div class="q">${whole}</div></section>`:''}</main></body></html>`;
- return {html,info};}
+ return {svg:await presSvg(info,ts),info};}
