@@ -23,7 +23,7 @@ export async function POST(req:NextRequest){
    try{const m=await gmail('messages/'+encodeURIComponent(it.msg)+'?format=full') as Message;
     if(!ticketLinks(m).some(l=>l.url===it.url)){out.push({msg:it.msg,url:it.url,failed:true});continue;}
     const k=await snapshot(it.url,it.label.replace(/[^\w֐-׿ .()-]/g,'').slice(0,40)||'כרטיס');if(!k){out.push({msg:it.msg,url:it.url,failed:true});continue;}
-    const id=newId();const exp=new Date(ilMoment(it.start.slice(0,16))+7*864e5);
+    const id=newId();const exp=new Date(Math.max(ilMoment(it.start.slice(0,16))+7*864e5,Date.now()+90*864e5));
     await sql`insert into gate_kept(id,user_id,url_key,msg,type,name,data,expires) values(${id},${u.id},${key},${it.msg},${k.type},${k.name},${k.data},${exp.toISOString()})`;
     out.push({msg:it.msg,url:it.url,file:{msg:it.msg,id:'k_'+id,name:k.name,type:k.type,size:Math.round(k.data.length*0.75)}});
    }catch{out.push({msg:it.msg,url:it.url,failed:true});}}

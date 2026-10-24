@@ -170,9 +170,10 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  const keeping=useRef(false);
  useEffect(()=>{if(!user||user.id==='demo'||busy||keeping.current)return;
   const TRY='gate:kept-try:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
-  const todo=store.tickets.filter(t=>upcoming(t)&&!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
-   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key})))
-   .filter(x=>Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
+  // Past events too (once each): many sellers' links still open for a while, and then "הצג הכל" works for them as well.
+  const todo=store.tickets.filter(t=>!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
+   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
+   .filter(x=>x.past?!tried[x.url]:Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
   if(!todo.length)return;keeping.current=true;
   void (async()=>{try{for(let i=0;i<todo.length;i+=4){const part=todo.slice(i,i+4);
     const r=await fetch('/api/keep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:part.map(({msg,url,label,start})=>({msg,url,label,start}))})}).catch(()=>null);
