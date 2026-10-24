@@ -8,7 +8,7 @@ export const dynamic='force-dynamic';export const maxDuration=30;
 const H={'Cache-Control':'private, no-store'};
 // Tickets added by hand (a picture or PDF from WhatsApp, PayBox and the like): the file is kept with the other kept tickets,
 // the details are kept here, and the app adds them to its list on every phone and after every rescan.
-const KINDS=['concert','show','movie','lecture','sport','festival','standup','other'] as const;
+const KINDS=['concert','show','movie','lecture','sport','festival','standup','party','other'] as const;
 const body=z.object({file:z.object({data:z.string().max(5_000_000),type:z.string().regex(/^(image\/(png|jpe?g|webp|gif|heic)|application\/pdf)$/),name:z.string().max(80)}),
  details:z.object({title:z.string().trim().min(1).max(120),start:z.string().regex(/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/),venue:z.string().max(120).optional(),kind:z.enum(KINDS),
   count:z.number().int().min(1).max(40),seats:z.array(z.string().max(60)).max(40),attach:z.string().max(200).optional()})});

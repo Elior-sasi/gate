@@ -4,7 +4,7 @@ import {dbOn} from '@/lib/push';
 import {navQuery,navLinks} from '@/lib/place';
 export const dynamic='force-dynamic';
 export const metadata:Metadata={title:'כרטיס - Unstage',robots:{index:false,follow:false}};
-const KIND:Record<string,string>={concert:'הופעה',show:'הצגה',movie:'סרט',lecture:'הרצאה',sport:'משחק',festival:'פסטיבל',standup:'סטנדאפ',other:'אירוע'};
+const KIND:Record<string,string>={concert:'הופעה',show:'הצגה',movie:'סרט',lecture:'הרצאה',sport:'משחק',festival:'פסטיבל',standup:'סטנדאפ',party:'מסיבה',other:'אירוע'};
 const DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];const MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const longDate=(s:string)=>{const [y,m,d]=s.slice(0,10).split('-').map(Number);const dt=new Date(Date.UTC(y,m-1,d));return 'יום '+DAYS[dt.getUTCDay()]+', '+d+' ב'+MONTHS[m-1];};
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'⁦'+m+'⁩');

@@ -387,7 +387,7 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .addPreview p{display:flex;gap:8px;align-items:center}
 .addForm{display:flex;flex-direction:column;gap:6px;margin-top:12px}
 .addForm select{width:100%;min-height:54px;padding:0 14px;border-radius:14px;background:#0d141b;border:1px solid #48556b;color:inherit;font:inherit;font-size:max(16px,calc(17px*var(--fs)))}
-.addForm input[type=date],.addForm input[type=time]{color:inherit;font:inherit;font-size:max(16px,calc(18px*var(--fs)));text-align:right}
+.addForm input[type=date],.addForm input[type=time]{-webkit-appearance:none;appearance:none;display:block;min-width:0;max-width:100%;box-sizing:border-box;color:inherit;font:inherit;font-size:max(16px,calc(18px*var(--fs)));text-align:right}
 .kindPick{border:0;padding:0;margin:4px 0 0;display:flex;flex-wrap:wrap;gap:8px}.kindPick legend{font-size:calc(15px*var(--fs));color:var(--mut);margin:4px 4px 6px;padding:0}
 .kindPick button{min-height:44px;padding:0 14px;border-radius:22px;background:#141c25;border:1px solid var(--line);color:var(--ink);font:inherit;font-weight:600}
 .kindPick button.on{background:#ffd27a;border-color:#ffd27a;color:#1b1206}

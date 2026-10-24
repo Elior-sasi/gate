@@ -1,7 +1,7 @@
 // Answers for the usual questions ("באיזו שורה אני יושב בהופעה הבאה?", "מתי הסרט?", "איפה זה?") without Gemini,
 // from the events on the phone: used when Gemini is busy or unavailable, so a simple question still gets an answer.
 import type {Ticket,Kind} from '@/lib/tickets';
-const KINDS:[RegExp,Kind[]][]=[[/הופע|קונצרט|מופע/,['concert','festival','standup']],[/הצג|תיאטרון/,['show']],[/סרט|הקרנ|קולנוע/,['movie']],[/הרצא|מאסטרקלאס/,['lecture']],[/משחק|ספורט/,['sport']],[/סטנד/,['standup']],[/פסטיבל/,['festival']]];
+const KINDS:[RegExp,Kind[]][]=[[/הופע|קונצרט|מופע/,['concert','festival','standup']],[/הצג|תיאטרון/,['show']],[/סרט|הקרנ|קולנוע/,['movie']],[/הרצא|מאסטרקלאס/,['lecture']],[/משחק|ספורט/,['sport']],[/סטנד/,['standup']],[/פסטיבל/,['festival']],[/מסיב/,['party']]];
 const DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
 const MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const norm=(s:string)=>s.toLowerCase().replace(/[^\w֐-׿]+/g,' ').trim();
