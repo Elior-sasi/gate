@@ -376,7 +376,8 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .menu>button.primary{justify-content:center;background:linear-gradient(180deg,#ffd27a,#f5a623);color:#1b1206;border-color:transparent;font-weight:700}.menu>button.primary:disabled{opacity:.5}.menu>button.ghost{justify-content:center}
 .offNote{margin:10px 2px 0;color:#ffd79a;font-size:calc(15px*var(--fs));line-height:1.5}.offNote.ok{color:var(--mut)}
 .smsBox{width:100%;box-sizing:border-box;margin:6px 0 8px;padding:10px 12px;border-radius:12px;background:#0f161e;border:1px solid var(--line);color:var(--ink);font:inherit;font-size:max(16px,calc(15px*var(--fs)));resize:vertical}
-/* הוספת כרטיס */
+/* הוספת כרטיס (above an open event, when editing from it) */
+.sheet.addTicket{z-index:40}
 .addTicket h2{font-size:calc(26px*var(--fs));margin:4px 0 6px}
 .addPick{display:grid;grid-template-columns:1fr 1fr;gap:10px}.addPick .ghost{display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;cursor:pointer;text-align:center;padding:0 10px;line-height:1.2}
 .addPick .ghost:focus-within{outline:2px solid #ffb547;outline-offset:2px}
