@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {applyManual,type ManualItem} from '@/lib/manual';
+import type {Ticket} from '@/lib/tickets';
+const ev:Ticket={key:'e1',msgs:['a'],thread:'a',title:'נועה קירל',kind:'concert',start:'2026-11-20T21:00',seats:['שורה 12, כיסא 7'],count:1,order:'111',mailed:1,links:[],files:[{msg:'a',id:'fa',name:'t.pdf',type:'application/pdf',size:1}]};
+const it=(o:Partial<ManualItem>):ManualItem=>({id:'x1',at:'2026-10-24T10:00:00Z',title:'מסיבת פורים',start:'2026-12-01T22:00',kind:'other',count:2,seats:[],file:{id:'k_1',name:'כרטיס.jpg',type:'image/jpeg',size:5},...o});
+test('a hand-added ticket becomes an event, once',()=>{const a=applyManual([ev],[it({})]);assert.equal(a.length,2);const b=applyManual(a,[it({})]);assert.equal(b.length,2);
+ const m=b.find(t=>t.title==='מסיבת פורים')!;assert.equal(m.count,2);assert.equal(m.files[0].id,'k_1');});
+test('a hand-added ticket joins an event already in the list',()=>{const a=applyManual([ev],[it({attach:'e1',title:'נועה קירל',start:'2026-11-20T21:00',count:1,seats:['שורה 12, כיסא 8']})]);
+ assert.equal(a.length,1);assert.equal(a[0].count,2);assert.equal(a[0].files.length,2);
+ const g=applyManual(a,[],['x1']);assert.equal(g[0].files.length,1);assert.equal(g[0].count,1);assert.equal(applyManual(applyManual([ev],[it({})]),[],['x1']).length,1);});

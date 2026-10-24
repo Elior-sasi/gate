@@ -23,6 +23,7 @@ export function db(){const sql=neon(DB_URL());
   checked_at timestamptz,updated_at timestamptz not null default now())`.then(()=>sql`create table if not exists gate_meta(k text primary key,v timestamptz not null)`)
   .then(()=>sql`create table if not exists gate_kept(id text primary key,user_id text not null,url_key text not null,msg text not null,type text not null,name text not null,data text not null,expires timestamptz not null,created_at timestamptz not null default now())`)
   .then(()=>sql`create table if not exists gate_sms(id bigserial primary key,user_id text not null,text text not null,item jsonb not null default '{}',created_at timestamptz not null default now())`)
+  .then(()=>sql`create table if not exists gate_manual(id text primary key,user_id text not null,item jsonb not null,created_at timestamptz not null default now())`)
   .then(()=>sql`create table if not exists gate_shares(id text primary key,user_id text not null,data jsonb not null,expires timestamptz not null,created_at timestamptz not null default now())`);
  return {sql,ready};}
 // Personal links (calendar, widget): user id + signature, nothing extra stored.
