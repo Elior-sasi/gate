@@ -207,7 +207,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   if(added)say('כרטיס מ-SMS נוסף ל'+added);},[user]);
  useEffect(()=>{if(ready&&!busy)void pullSms();},[ready,busy,pullSms]);
  // Tickets added by hand (lib/manual): kept on the server and on the phone, added again on every pull.
- const MAN=(u:string)=>'gate:man:'+u;const GONE=(u:string)=>'gate:man-gone:'+u;const [adding,setAdding]=useState(false);
+ const MAN=(u:string)=>'gate:man:'+u;const GONE=(u:string)=>'gate:man-gone:'+u;const [adding,setAdding]=useState(false);const [editing,setEditing]=useState<ManualItem|null>(null);
  const applyMan=useCallback((items:ManualItem[])=>{if(!user)return;const gone=load(GONE(user.id),[] as string[]);
   setStore(s=>{const tickets=applyManual(s.tickets,items.filter(x=>!gone.includes(x.id)),gone);if(tickets===s.tickets)return s;const n={...s,tickets};save(KEY(user.id),n);return n;});},[user]);
  const pullMan=useCallback(async()=>{if(!user||user.id==='demo')return;let items=load(MAN(user.id),[] as ManualItem[]);
@@ -300,8 +300,9 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   </>}
   {tab===2&&<Summary list={visible}/>}
   {tab===3&&<SettingsView smsLast={smsLast} onSmsPasted={()=>void pullSms()} size={size} onSize={(i:number)=>{setSize(i);save('unstage:size',i);}} user={user} srv={srv} push={push} pushMsg={pushMsg} onPush={push==='on'?disablePush:enablePush} onTest={testPush} onCopy={(t:string)=>{navigator.clipboard?.writeText(t).then(()=>say('הועתק'),()=>{});}} hiddenCount={hidden.length} onRestore={()=>{setHidden([]);save(HID(user.id),[]);say('כל האירועים חזרו');}} onRescan={()=>{save(KEY(user.id),{tickets:[],read:[],updated:''});setStore({tickets:[],read:[],updated:''});setTab(0);scan(true);}}/>}
+  {editing&&user&&<AddTicket edit={editing} events={named.filter(t=>upcoming(t)&&!t.cancelled)} onClose={()=>setEditing(null)} onSaved={(x:ManualItem)=>{save(MAN(user.id),load(MAN(user.id),[] as ManualItem[]).map(y=>y.id===x.id?x:y));applyMan([x]);setEditing(null);say('השינויים נשמרו');}}/>}
   {adding&&user&&<AddTicket events={named.filter(t=>upcoming(t)&&!t.cancelled)} onClose={()=>setAdding(false)} onSaved={(x:ManualItem)=>{save(MAN(user.id),[...load(MAN(user.id),[] as ManualItem[]),x]);applyMan([x]);setAdding(false);say('הכרטיס נוסף');}}/>}
-  {sel&&<Sheet t={sel} onRemoveManual={()=>void removeMan(sel)} saved={saved.has(sel.key)} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onMarkCx={()=>markCx(sel.key)} onCopy={()=>say('הועתק')}/>}
+  {sel&&<Sheet t={sel} onRemoveManual={()=>void removeMan(sel)} onEditManual={()=>{const ids=sel.files.filter(f=>f.msg.startsWith('man')).map(f=>f.msg.slice(3));const it=load(MAN(user!.id),[] as ManualItem[]).find(x=>ids.includes(x.id));if(it)setEditing(it);}} saved={saved.has(sel.key)} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onMarkCx={()=>markCx(sel.key)} onCopy={()=>say('הועתק')}/>}
   {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
    <div className="askHead"><h3><Sparkles size={19}/>שאל את Unstage</h3><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
    <div className="askList" aria-live="polite">{!chat.length&&<div className="askHints">{['מה האירוע הבא שלי?','כמה הוצאתי על כרטיסים השנה?','באיזה שורה אני יושב בהופעה הבאה?','מה יש לי החודש?'].map(h=><button key={h} onClick={()=>ask(h)}>{h}</button>)}</div>}
@@ -389,7 +390,7 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
-function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual}:{onRemoveManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual,onEditManual}:{onRemoveManual:()=>void;onEditManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
@@ -419,6 +420,7 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManua
    {upcoming(t)&&!t.cancelled&&(t.files.length>0||t.links.length>0)&&<button className="ghost" onClick={()=>setGift(true)}><Send size={19}/>שלח כרטיס למישהו</button>}
    {upcoming(t)&&!t.cancelled&&<button className="primary" onClick={()=>addToCalendar(t)}><CalendarPlus size={20}/>הוספה ליומן עם תזכורת</button>}
    {t.thread&&<a className="ghost" href={'https://mail.google.com/mail/u/0/#all/'+t.thread} target="_blank" rel="noopener"><Mail size={19}/>פתיחת המייל</a>}</div>
+  {t.files.some(f=>f.msg.startsWith('man'))&&<button className="textBtn" onClick={onEditManual}><Pencil size={16} style={{verticalAlign:-3,marginLeft:6}}/>עריכת הכרטיס שהוספתי</button>}
   {t.files.some(f=>f.msg.startsWith('man'))&&<button className="textBtn" onClick={()=>{if(confirm('למחוק את הכרטיס שהוספת?'))onRemoveManual();}}><Trash2 size={16} style={{verticalAlign:-3,marginLeft:6}}/>מחיקת הכרטיס שהוספתי</button>}
   {(!t.cancelled||t.mine)&&<button className="textBtn" onClick={onMarkCx}><RotateCcw size={16} style={{verticalAlign:-3,marginLeft:6}}/>{t.mine?'לא ביטלתי - הסר את הסימון':'ביטלתי את ההזמנה - סמן כבוטל'}</button>}
   <button className="textBtn" onClick={onHide}><EyeOff size={16} style={{verticalAlign:-3,marginLeft:6}}/>זה לא כרטיס - הסתר</button>
@@ -426,44 +428,61 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManua
 // "הוספת כרטיס": a ticket that came as a picture or PDF (WhatsApp, PayBox), uploaded or pasted. Gemini fills in the details
 // from the picture when it can; the user checks them, and can add the ticket to an event already in the list.
 const KIND_KEYS:Kind[]=['concert','show','movie','lecture','sport','standup','festival','other'];
-async function shrink(file:Blob):Promise<{data:string;type:string}>{const b64=(b:Blob)=>new Promise<string>((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=no;r.readAsDataURL(b);});
- if(file.type==='application/pdf'||file.type==='image/gif')return {data:await b64(file),type:file.type};
- // Pictures (screenshots, HEIC photos) as JPEG at most 2000px wide: small enough to keep, sharp enough for the barcode.
- const bmp=await createImageBitmap(file);const k=Math.min(1,2000/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.round(bmp.width*k);c.height=Math.round(bmp.height*k);
- c.getContext('2d')!.drawImage(bmp,0,0,c.width,c.height);const out=await new Promise<Blob>((ok,no)=>c.toBlob(b=>b?ok(b):no(new Error('img')),'image/jpeg',0.9));return {data:await b64(out),type:'image/jpeg'};}
-function AddTicket({events,onClose,onSaved}:{events:Ticket[];onClose:()=>void;onSaved:(x:ManualItem)=>void}){
- const [file,setFile]=useState<{data:string;type:string;url:string}|null>(null);const [msg,setMsg]=useState('');const [reading,setReading]=useState(false);const [busy,setBusy]=useState(false);
- const [title,setTitle]=useState('');const [date,setDate]=useState('');const [hour,setHour]=useState('');const [venue,setVenue]=useState('');const [kind,setKind]=useState<Kind>('concert');
- const [count,setCount]=useState(1);const [seats,setSeats]=useState('');const [attach,setAttach]=useState('');const pasteBox=useRef<HTMLDivElement>(null);
+// Smart crop: a screenshot of a picture (WhatsApp shows it on black) loses the plain margins around the ticket.
+// The margin colour is taken from the corners; rows and columns with almost nothing else in them are cut away.
+function trimBox(img:CanvasImageSource,w:number,h:number){const k=Math.min(1,400/Math.max(w,h));const cw=Math.max(1,Math.round(w*k)),ch=Math.max(1,Math.round(h*k));
+ const c=document.createElement('canvas');c.width=cw;c.height=ch;const x=c.getContext('2d',{willReadFrequently:true})!;x.drawImage(img,0,0,cw,ch);const d=x.getImageData(0,0,cw,ch).data;
+ const px=(i:number,j:number)=>(j*cw+i)*4;const corners=[px(0,0),px(cw-1,0),px(0,ch-1),px(cw-1,ch-1)];const bg=[0,1,2].map(n=>corners.reduce((a,i)=>a+d[i+n],0)/4);
+ if(corners.some(i=>Math.abs(d[i]-bg[0])+Math.abs(d[i+1]-bg[1])+Math.abs(d[i+2]-bg[2])>60))return null;// corners differ: no plain margin
+ const off=(i:number,j:number)=>{const p=px(i,j);return Math.abs(d[p]-bg[0])+Math.abs(d[p+1]-bg[1])+Math.abs(d[p+2]-bg[2])>60;};
+ const row=(j:number)=>{let n=0;for(let i=0;i<cw;i++)if(off(i,j))n++;return n>Math.max(2,cw*0.02);};const col=(i:number)=>{let n=0;for(let j=0;j<ch;j++)if(off(i,j))n++;return n>Math.max(2,ch*0.02);};
+ let t=0,b=ch-1,l=0,r=cw-1;while(t<b&&!row(t))t++;while(b>t&&!row(b))b--;while(l<r&&!col(l))l++;while(r>l&&!col(r))r--;
+ if(b-t<ch*0.08||r-l<cw*0.08)return null;const box={x:Math.max(0,(l-1)/k),y:Math.max(0,(t-1)/k),w:Math.min(w,(r-l+3)/k),h:Math.min(h,(b-t+3)/k)};
+ return box.w*box.h<w*h*0.92?box:null;}
+type Prep={data:string;type:string;url:string;cropped:boolean};
+async function prepare(file:Blob,crop=true):Promise<Prep>{const b64=(b:Blob)=>new Promise<string>((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(',')[1]||'');r.onerror=no;r.readAsDataURL(b);});
+ if(file.type==='application/pdf'||file.type==='image/gif')return {data:await b64(file),type:file.type,url:URL.createObjectURL(file),cropped:false};
+ // Pictures (screenshots, HEIC photos) as JPEG at most 2000px: small enough to keep, sharp enough for the barcode.
+ const bmp=await createImageBitmap(file);const box=crop?trimBox(bmp,bmp.width,bmp.height):null;const src=box||{x:0,y:0,w:bmp.width,h:bmp.height};
+ const k=Math.min(1,2000/Math.max(src.w,src.h));const c=document.createElement('canvas');c.width=Math.round(src.w*k);c.height=Math.round(src.h*k);
+ c.getContext('2d')!.drawImage(bmp,src.x,src.y,src.w,src.h,0,0,c.width,c.height);const out=await new Promise<Blob>((ok,no)=>c.toBlob(b=>b?ok(b):no(new Error('img')),'image/jpeg',0.9));
+ return {data:await b64(out),type:'image/jpeg',url:URL.createObjectURL(out),cropped:!!box};}
+function AddTicket({events,onClose,onSaved,edit}:{events:Ticket[];onClose:()=>void;onSaved:(x:ManualItem)=>void;edit?:ManualItem}){
+ const [file,setFile]=useState<Prep|null>(null);const [orig,setOrig]=useState<Blob|null>(null);
+ const oldUrl=edit?fileUrl({msg:'man'+edit.id,id:edit.file.id,name:edit.file.name,type:edit.file.type,size:edit.file.size}):'';const [msg,setMsg]=useState('');const [reading,setReading]=useState(false);const [busy,setBusy]=useState(false);
+ const [title,setTitle]=useState(edit?.title||'');const [date,setDate]=useState(edit?.start.slice(0,10)||'');const [hour,setHour]=useState(edit?.start.slice(11,16)||'');const [venue,setVenue]=useState(edit?.venue||'');const [kind,setKind]=useState<Kind>(edit?.kind||'concert');
+ const [count,setCount]=useState(edit?.count||1);const [seats,setSeats]=useState(edit?.seats.join('\n')||'');const [attach,setAttach]=useState(edit?.attach||'');const pasteBox=useRef<HTMLDivElement>(null);
  const take=async(b:Blob|null|undefined)=>{if(!b)return;if(!/^image\/|application\/pdf/.test(b.type)){setMsg('אפשר להוסיף תמונה או PDF.');return;}setMsg('');
-  try{const f=await shrink(b);setFile({...f,url:URL.createObjectURL(b)});setReading(true);
+  try{const f=await prepare(b);setOrig(b);setFile(f);if(edit){setMsg(f.cropped?'חתכתי את השוליים.':'');return;}setReading(true);
    const r=await fetch('/api/manual/read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(f)}).catch(()=>null);const d=r?await r.json().catch(()=>({})):{};
    if(d.title)setTitle(t=>t||d.title);if(d.date)setDate(x=>x||d.date);if(d.time)setHour(x=>x||d.time);if(d.venue)setVenue(x=>x||d.venue);if(d.kind)setKind(d.kind);if(d.count)setCount(d.count);if(d.seats?.length)setSeats(x=>x||d.seats.join('\n'));
    const hit=d.title&&d.date&&events.find(t=>t.start.slice(0,10)===d.date&&(t.title.includes(d.title)||d.title.includes(t.title)));if(hit)setAttach(hit.key);
-   setMsg(d.title?'מילאתי את הפרטים מהתמונה. כדאי לבדוק.':'לא הצלחתי לקרוא את הפרטים מהתמונה. מלא אותם כאן.');}catch{setMsg('לא הצלחתי לפתוח את הקובץ.');}finally{setReading(false);}};
+   setMsg((f.cropped?'חתכתי את השוליים. ':'')+(d.title?'מילאתי את הפרטים מהתמונה. כדאי לבדוק.':'לא הצלחתי לקרוא את הפרטים מהתמונה. מלא אותם כאן.'));}catch{setMsg('לא הצלחתי לפתוח את הקובץ.');}finally{setReading(false);}};
  const paste=async()=>{try{const items=await navigator.clipboard.read();for(const it of items){const t=it.types.find(x=>/^image\//.test(x));if(t){await take(await it.getType(t));return;}}setMsg('אין תמונה בהעתקה. העתק את התמונה בוואטסאפ ונסה שוב.');}
   catch{setMsg('לחץ לחיצה ארוכה בתיבה למטה ובחר "הדבק".');pasteBox.current?.focus();}};
  const target=events.find(t=>t.key===attach);
- const ok=!!file&&(target||(title.trim()&&date));
- const saveIt=async()=>{if(!file||!ok)return;setBusy(true);setMsg('');try{
+ const ok=(!!file||!!edit)&&(target||(title.trim()&&date));
+ const recrop=async(on:boolean)=>{const b=orig||(edit?await fetch(oldUrl).then(r=>r.blob()).catch(()=>null):null);if(!b)return;if(!orig)setOrig(b);const f=await prepare(b,on);setFile(f);setMsg(on?(f.cropped?'חתכתי את השוליים.':'לא מצאתי שוליים לחתוך.'):'');};
+ const saveIt=async()=>{if(!ok)return;setBusy(true);setMsg('');try{
    const details=target?{title:target.title,start:target.start,venue:target.venue,kind:target.kind,attach:target.key}:{title:title.trim(),start:date+(hour?'T'+hour:''),venue:venue.trim()||undefined,kind};
-   const body={file:{data:file.data,type:file.type,name:'כרטיס.'+(file.type==='application/pdf'?'pdf':'jpg')},details:{...details,count,seats:seats.split(/\n+/).map(x=>x.trim()).filter(Boolean)}};
-   const r=await fetch('/api/manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));
+   const body={...(edit?{id:edit.id}:{}),...(file?{file:{data:file.data,type:file.type,name:'כרטיס.'+(file.type==='application/pdf'?'pdf':'jpg')}}:{}),details:{...details,count,seats:seats.split(/\n+/).map(x=>x.trim()).filter(Boolean)}};
+   const r=await fetch('/api/manual',{method:edit?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));
    if(!r.ok||!d.item)throw new Error(d.error==='big'?'הקובץ גדול מדי.':'לא הצלחתי לשמור. נסה שוב.');onSaved(d.item);}catch(e){setMsg(e instanceof Error?e.message:'לא הצלחתי לשמור.');}finally{setBusy(false);}};
  useEffect(()=>()=>{if(file)URL.revokeObjectURL(file.url);},[file]);
- return <div className="sheet addTicket" role="dialog" aria-modal="true" aria-label="הוספת כרטיס">
+ return <div className="sheet addTicket" role="dialog" aria-modal="true" aria-label={edit?'עריכת כרטיס':'הוספת כרטיס'}>
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button></div>
-  <h2>הוספת כרטיס</h2>
-  <p className="setNote">כרטיס שקיבלת כתמונה או כ-PDF, למשל בוואטסאפ אחרי תשלום בפייבוקס.</p>
+  <h2>{edit?'עריכת כרטיס':'הוספת כרטיס'}</h2>
+  {!edit&&<p className="setNote">כרטיס שקיבלת כתמונה או כ-PDF, למשל בוואטסאפ אחרי תשלום בפייבוקס.</p>}
   <div className="addPick">
-   <label className="ghost"><ImagePlus size={20}/>העלאת תמונה או PDF<input type="file" accept="image/*,application/pdf" className="sr" onChange={e=>void take(e.target.files?.[0])}/></label>
+   <label className="ghost"><ImagePlus size={20}/>{edit?'החלפת התמונה':'העלאת תמונה או PDF'}<input type="file" accept="image/*,application/pdf" className="sr" onChange={e=>void take(e.target.files?.[0])}/></label>
    <button type="button" className="ghost" onClick={()=>void paste()}><ClipboardPaste size={20}/>הדבקת תמונה</button></div>
   <div ref={pasteBox} className="pasteBox" contentEditable suppressContentEditableWarning role="textbox" aria-label="תיבת הדבקה: לחיצה ארוכה ואז הדבק"
    onPaste={e=>{e.preventDefault();const f=[...e.clipboardData.files][0];if(f)void take(f);else setMsg('אין תמונה בהעתקה.');}} onInput={e=>{(e.target as HTMLDivElement).textContent='';}}>{file?'':'או לחיצה ארוכה כאן ← הדבק'}</div>
-  {file&&<div className="addPreview">{file.type==='application/pdf'?<p><FileText size={20}/> קובץ PDF נבחר</p>:<img src={file.url} alt="הכרטיס שנבחר"/>}</div>}
+  {(file||edit)&&<div className="addPreview">{(file?file.type:edit!.file.type)==='application/pdf'?<p><FileText size={20}/> קובץ PDF</p>:<img src={file?file.url:oldUrl} alt="הכרטיס"/>}</div>}
+  {(file?file.type!=='application/pdf':edit&&/image/.test(edit.file.type))&&<button type="button" className="textBtn" onClick={()=>void recrop(!file?.cropped)}>{file?.cropped?'בלי חיתוך - התמונה המקורית':'חיתוך חכם של השוליים'}</button>}
   {reading&&<p className="setNote" role="status">קורא את הפרטים מהתמונה…</p>}
   {msg&&<p className="setNote" role="status">{msg}</p>}
-  {file&&<div className="addForm">
+  {(file||edit)&&<div className="addForm">
    {events.length>0&&<><label htmlFor="mAttach">לאיזה אירוע?</label>
     <select id="mAttach" value={attach} onChange={e=>setAttach(e.target.value)}><option value="">אירוע חדש</option>{events.map(t=><option key={t.key} value={t.key}>{t.title+' - '+t.start.slice(0,10).split('-').reverse().join('.')}</option>)}</select></>}
    {!target&&<>
@@ -474,7 +493,7 @@ function AddTicket({events,onClose,onSaved}:{events:Ticket[];onClose:()=>void;on
     <fieldset className="kindPick"><legend>סוג</legend>{KIND_KEYS.map(k=><button type="button" key={k} aria-pressed={kind===k} className={kind===k?'on':''} onClick={()=>setKind(k)}>{KIND[k].label}</button>)}</fieldset></>}
    <label htmlFor="mCount">כמה כרטיסים בקובץ</label><input id="mCount" type="number" inputMode="numeric" min={1} max={40} value={count} onChange={e=>setCount(Math.max(1,Math.min(40,Number(e.target.value)||1)))}/>
    <label htmlFor="mSeats">מקומות (לא חובה, אחד בכל שורה)</label><textarea id="mSeats" rows={2} value={seats} onChange={e=>setSeats(e.target.value)} placeholder="שורה 5, כיסא 12"/>
-   <button className="primary" disabled={!ok||busy} onClick={()=>void saveIt()}>{busy?'שומר…':'שמירת הכרטיס'}</button>
+   <button className="primary" disabled={!ok||busy} onClick={()=>void saveIt()}>{busy?'שומר…':edit?'שמירת השינויים':'שמירת הכרטיס'}</button>
   </div>}
  </div>;}
 // Scriptable widget source with the personal link inside; the drawing code itself comes from Unstage, so updates arrive by themselves.

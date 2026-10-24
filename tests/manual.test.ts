@@ -9,3 +9,6 @@ test('a hand-added ticket becomes an event, once',()=>{const a=applyManual([ev],
 test('a hand-added ticket joins an event already in the list',()=>{const a=applyManual([ev],[it({attach:'e1',title:'נועה קירל',start:'2026-11-20T21:00',count:1,seats:['שורה 12, כיסא 8']})]);
  assert.equal(a.length,1);assert.equal(a[0].count,2);assert.equal(a[0].files.length,2);
  const g=applyManual(a,[],['x1']);assert.equal(g[0].files.length,1);assert.equal(g[0].count,1);assert.equal(applyManual(applyManual([ev],[it({})]),[],['x1']).length,1);});
+test('an edit to a hand-added ticket is carried over',()=>{const a=applyManual([ev],[it({})]);
+ const b=applyManual(a,[it({title:'מסיבת חנוכה',count:3,seats:['שורה 1, כיסא 1'],file:{id:'k_2',name:'כרטיס.jpg',type:'image/jpeg',size:4}})]);
+ const m=b.find(t=>t.key==='man:x1')!;assert.equal(m.title,'מסיבת חנוכה');assert.equal(m.count,3);assert.equal(m.files[0].id,'k_2');assert.equal(applyManual(b,[it({title:'מסיבת חנוכה',count:3,seats:['שורה 1, כיסא 1'],file:{id:'k_2',name:'כרטיס.jpg',type:'image/jpeg',size:4}})]),b);});

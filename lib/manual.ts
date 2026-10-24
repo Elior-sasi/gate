@@ -9,8 +9,14 @@ export function applyManual(tickets:Ticket[],items:ManualItem[],gone:string[]=[]
  if(gone.length)out=out.flatMap(t=>{const mine=(m:string)=>gone.includes(m.replace(/^man/,''));if(!t.msgs.some(mine)&&!t.files.some(f=>mine(f.msg)))return [t];
   const msgs=t.msgs.filter(m=>!mine(m));if(!msgs.length)return [];const parts=Object.fromEntries(Object.entries(partsOf(t)).filter(([k])=>!mine(k.slice(2))));const tot=totals(parts);
   return [{...t,msgs,parts,files:t.files.filter(f=>!mine(f.msg)),seats:tot.seats,count:tot.count}];});
- for(const x of items){const msg='man'+x.id;if(out.some(t=>t.files.some(f=>f.msg===msg)))continue;const at=new Date(x.at).getTime();
+ for(const x of items){const msg='man'+x.id;const at=new Date(x.at).getTime();
   const f:TFile={msg,id:x.file.id,name:x.file.name,type:x.file.type,size:x.file.size,at};const part={seats:x.seats,count:x.count,mailed:at};
+  // Already in the list: an edit (details, seats, a new picture) is carried over; nothing changes when nothing was edited.
+  const has=out.find(t=>t.files.some(g=>g.msg===msg));
+  if(has){const own=has.key==='man:'+x.id;const p=partsOf(has)['m:'+msg];const g=has.files.find(g=>g.msg===msg)!;
+   const same=g.id===f.id&&p&&JSON.stringify([p.seats,p.count])===JSON.stringify([x.seats,x.count])&&(!own||(has.title===x.title&&has.start===x.start&&(has.venue||'')===(x.venue||'')&&has.kind===x.kind));
+   if(same)continue;const parts={...partsOf(has),['m:'+msg]:part};const tot=totals(parts);
+   out=out.map(t=>t!==has?t:{...t,...(own?{title:x.title,start:x.start,venue:x.venue||undefined,kind:x.kind}:{}),parts,seats:tot.seats,count:tot.count,files:t.files.map(h=>h.msg===msg?f:h)});continue;}
   const target=x.attach?out.find(t=>t.key===x.attach)||out.find(t=>norm(t.title)===norm(x.title)&&t.start.slice(0,10)===x.start.slice(0,10)):undefined;
   if(target){out=out.map(t=>{if(t!==target)return t;const parts={...partsOf(t),['m:'+msg]:part};
     const tot=totals(parts);return {...t,parts,msgs:[...t.msgs,msg],files:[...t.files,f],seats:tot.seats,count:tot.count};});continue;}
