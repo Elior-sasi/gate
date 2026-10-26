@@ -1,0 +1,11 @@
+name: Unstage diag
+on:
+  workflow_dispatch:
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: |
+          r=$(curl -sS --max-time 90 -w ' HTTP %{http_code}' https://gatetickets.vercel.app/api/diag)
+          echo "::notice title=diag::$r"
