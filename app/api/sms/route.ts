@@ -14,10 +14,10 @@ export async function GET(req:NextRequest){let id='';try{id=(await pushIdentity(
  await sql`delete from gate_sms where user_id=${id} and created_at<now()-interval '60 days'`;
  const rows=await sql`select id,item,created_at from gate_sms where user_id=${id} order by created_at`;
  // Tickets from pres.global kept in an older drawing are drawn again in the current one (the cinema's own ticket layout).
- for(const r of rows){const it=r.item as {url?:string;file?:{id:string;type:string}|null;v?:number};if(!it?.url||!it.file||it.v===3||!presApi(it.url))continue;
-  try{const p=await snapshot(it.url,'כרטיס');if(!p||p.type==='image/svg+xml'){const item={...it,v:3};await sql`update gate_sms set item=${JSON.stringify(item)} where id=${r.id}`;r.item=item;continue;}const k=newId();const data=p.data;
-   await sql`insert into gate_kept(id,user_id,url_key,msg,type,name,data,expires) values(${k},${id},${keyOf(id+'|'+it.url+'|v3')},${'sms'},${p.type},${p.name},${data},${new Date(Date.now()+120*864e5).toISOString()})`;
-   const item={...it,v:3,file:{id:'k_'+k,name:p.name,type:p.type,size:Math.round(data.length*0.75)},...(p.info?{info:p.info}:{})};
+ for(const r of rows){const it=r.item as {url?:string;file?:{id:string;type:string}|null;v?:number};if(!it?.url||!it.file||it.v===4||!presApi(it.url))continue;
+  try{const p=await snapshot(it.url,'כרטיס');if(!p||p.type==='image/svg+xml'){const item={...it,v:4};await sql`update gate_sms set item=${JSON.stringify(item)} where id=${r.id}`;r.item=item;continue;}const k=newId();const data=p.data;
+   await sql`insert into gate_kept(id,user_id,url_key,msg,type,name,data,expires) values(${k},${id},${keyOf(id+'|'+it.url+'|v4')},${'sms'},${p.type},${p.name},${data},${new Date(Date.now()+120*864e5).toISOString()})`;
+   const item={...it,v:4,file:{id:'k_'+k,name:p.name,type:p.type,size:Math.round(data.length*0.75)},...(p.info?{info:p.info}:{})};
    await sql`delete from gate_kept where id=${it.file.id.slice(2)} and user_id=${id}`;
    await sql`update gate_sms set item=${JSON.stringify(item)} where id=${r.id}`;r.item=item;}catch{}}
  await closeBrowser();
