@@ -22,6 +22,8 @@ export async function POST(req:NextRequest){
    let old:Record<string,unknown>|undefined=(await sql`select id,type,name,length(data) as n from gate_kept where user_id=${u.id} and url_key=${key}`)[0];
    // An earlier copy that is only an empty app shell (pres.global before it was drawn from its data) is made again.
    // A ticket drawn from its data (before the page itself could be kept) is made again too.
+   // So is a page kept as a picture before only the tickets were kept (the whole page, a slider showing one ticket).
+   if(old&&old.type==='image/png'&&(await sql`select 1 from gate_kept where id=${old.id} and created_at<'2026-10-26T20:50:00Z'`).length){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}
    if(old&&old.type==='image/svg+xml'){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}
    if(old&&old.type==='text/html'){const d=(await sql`select data from gate_kept where id=${old.id}`)[0];if(d&&shell(Buffer.from(String(d.data),'base64').toString('utf8'))){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}}
    if(old){out.push({msg:it.msg,url:it.url,file:{msg:it.msg,id:'k_'+old.id,name:String(old.name),type:String(old.type),size:Math.round(Number(old.n)*0.75)}});continue;}

@@ -36,19 +36,21 @@ const where=(t:Ticket)=>navQuery(t);
 // As in Unbox: Google Maps, Moovit, Waze.
 function NavLinks({q}:{q:string}){const l=navLinks(q);return <div className="navLinks"><a className="ghost" href={l.google} target="_blank" rel="noopener noreferrer"><MapIcon size={18}/>Google Maps</a><a className="ghost" href={l.moovit} target="_blank" rel="noopener noreferrer"><Bus size={18}/>Moovit</a><a className="ghost" href={l.waze} target="_blank" rel="noopener noreferrer"><Navigation size={18}/>Waze</a></div>;}
 const fileUrl=(f:TFile)=>'/api/file?'+new URLSearchParams({m:f.msg,a:f.id,n:f.name,t:f.type});
-const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:/image/.test(f.type)?QrCode:FileText;
+// A picture from the mail is a barcode; a kept ticket (a page kept as a picture, a ticket added by hand) is a ticket like a PDF.
+const barcode=(f:TFile)=>/image/.test(f.type)&&!f.id.startsWith('k_');
+const fileIcon=(f:TFile)=>/pkpass/i.test(f.type+f.name)?Wallet:barcode(f)?QrCode:FileText;
 // How many tickets the event has (one PDF may hold several), so the buttons say כרטיס or כרטיסים.
 const nTickets=(t:Ticket)=>Math.max(t.count||0,t.seats.length,t.files.filter(f=>!/pkpass/i.test(f.type+f.name)).length,1);
 const showLabel=(t:Ticket)=>nTickets(t)>1?'הצג '+nTickets(t)+' כרטיסים':'הצג כרטיס';
 // What one ticket file holds: the tickets of the order it came with (its mail), so a PDF with two tickets says "2 כרטיסים".
-function inFile(t:Ticket,f:TFile){const docs=t.files.filter(g=>!/pkpass|image/i.test(g.type+g.name));if(docs.length===1&&docs[0]===f)return {n:nTickets(t),seats:t.seats};
+function inFile(t:Ticket,f:TFile){const docs=t.files.filter(g=>!/pkpass/i.test(g.type+g.name)&&!barcode(g));if(docs.length===1&&docs[0]===f)return {n:nTickets(t),seats:t.seats};
  const p=t.parts?.['m:'+f.msg];const same=docs.filter(g=>g.msg===f.msg).length;if(!p||same!==1)return {n:1,seats:[] as string[]};const seats=cleanSeats(p.seats||[]);return {n:Math.max(p.count||0,seats.length,1),seats};}
 const seatShort=(s:string[])=>{if(!s.length)return '';const m=s.map(x=>x.match(/שורה (\S+), כיסא (\d+)/)).filter(Boolean) as RegExpMatchArray[];
  if(m.length===s.length&&m.every(x=>x[1]===m[0][1]))return 'שורה '+m[0][1]+', '+(m.length>1?'כיסאות '+m.map(x=>x[2]).join(', '):'כיסא '+m[0][2]);return s.join(' · ');};
 // A venue that is only the hall ("אולם 15", "אולם - אולם 1") gets the place in front of it, from the seller ("סינמטק תל אביב - אולם 1").
 function fullVenue(t:Ticket){const v=(t.venue||'').replace(/^\s*(?:אולם|hall)\s*[-–:]\s*(?=(?:אולם|hall)\b)/i,'').trim();
  if(!/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(v))return t.venue;const p=(t.provider||'').replace(/^(?:Planet Cinema)$/i,'פלאנט').trim();return p&&!/^[\w.+-]+@/.test(p)?p+' - '+v:v;}
-const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':/image/.test(f.type)?'ברקוד'+(n>1?' '+(i+1):''):k>1?k+' כרטיסים':'כרטיס'+(n>1&&k<1?' '+(i+1):'');
+const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':barcode(f)?'ברקוד'+(n>1?' '+(i+1):''):k>1?k+' כרטיסים':'כרטיס'+(n>1&&k<1?' '+(i+1):'');
 // Latin runs (with their dashes, commas and colons) are kept together left-to-right inside Hebrew text: "CHAINSAW MAN – THE MOVIE" stays in one piece.
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
 const NAM=(u:string)=>'gate:names:'+u;
@@ -184,7 +186,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   const TRY='gate:kept-try5:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
   // Past events too (once each): many sellers' links still open for a while, and then "הצג הכל" works for them as well.
   // Copies kept as a page before pages built by scripts were caught are checked once more (an empty one is made again).
-  const V2='gate:kept-v7:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
+  const V2='gate:kept-v8:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
   const todo=store.tickets.filter(t=>!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
    .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&(!/text\/html|svg/.test(f.type)||v2.includes(l.url)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
    .filter(x=>x.past?!tried[x.url]:Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
@@ -605,7 +607,7 @@ function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boo
    if(blob.current&&!off){setFrame(URL.createObjectURL(blob.current));return;}
    setErr(why==='offline'?'אין חיבור לאינטרנט והכרטיס הזה עדיין לא נשמר במכשיר.':why==='auth'?'צריך להתחבר מחדש ל-Google כדי לפתוח את הכרטיס.':why==='file'?'הכרטיס לא נמצא במייל.':'לא הצלחתי להציג את הכרטיס כאן.');}finally{setBusy(false);}})();return()=>{off=true;};},[f,img,page]);
  useEffect(()=>()=>{if(frame)URL.revokeObjectURL(frame);},[frame]);
- return <div className="doc" ref={box}>{page&&<iframe className="pdfFrame keptPage" src={fileUrl(f)} title="הכרטיס" sandbox=""/>}{img&&<img className={/svg/.test(f.type)?'cards':undefined} src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&(first?<div className="loader"><Mark cls="lmark" anim="bob"/><p>{'פותח את הכרטיס…'}</p></div>:<div className="docWait" aria-hidden="true"/>)}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
+ return <div className="doc" ref={box}>{page&&<iframe className="pdfFrame keptPage" src={fileUrl(f)} title="הכרטיס" sandbox=""/>}{img&&<img className={/svg/.test(f.type)||f.id.startsWith('k_')&&/png/.test(f.type)?'cards':undefined} src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&(first?<div className="loader"><Mark cls="lmark" anim="bob"/><p>{'פותח את הכרטיס…'}</p></div>:<div className="docWait" aria-hidden="true"/>)}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
 // Full-screen ticket viewer with a close button (a home-screen app has no browser back button): one file, or all of an event's tickets one under the other.
 function Viewer({fs,onClose}:{fs:TFile[];onClose:()=>void}){const [zoom,setZoom]=useState('');
  return <div className="viewer" role="dialog" aria-label={fs.length>1?'כל הכרטיסים':'הכרטיס'}>{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
