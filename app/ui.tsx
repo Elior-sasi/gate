@@ -186,9 +186,9 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   const TRY='gate:kept-try5:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
   // Past events too (once each): many sellers' links still open for a while, and then "הצג הכל" works for them as well.
   // Copies kept as a page before pages built by scripts were caught are checked once more (an empty one is made again).
-  const V2='gate:kept-v8:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
+  const V2='gate:kept-v9:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
   const todo=store.tickets.filter(t=>!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
-   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&(!/text\/html|svg/.test(f.type)||v2.includes(l.url)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
+   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&v2.includes(l.url))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
    .filter(x=>x.past?!tried[x.url]:Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
   if(!todo.length)return;keeping.current=true;
   void (async()=>{try{for(let i=0;i<todo.length;i+=4){const part=todo.slice(i,i+4);
