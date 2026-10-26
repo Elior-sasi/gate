@@ -1,0 +1,11 @@
+name: Unstage cleanup
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -sS -X DELETE -H "Authorization: Bearer ${{ github.token }}" https://api.github.com/repos/${{ github.repository }}/git/refs/heads/diag -w '%{http_code}'
