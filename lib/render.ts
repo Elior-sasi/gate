@@ -1,12 +1,14 @@
 // Pages built by scripts (pres.global and others): opened in a real browser on the server and kept as a picture,
 // so the ticket looks exactly as the seller shows it. One browser per request, closed at the end.
-import {mkdir,copyFile,access} from 'node:fs/promises';
+import {mkdir,copyFile,access,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import type {Browser} from 'puppeteer-core';
 const UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 let open:Promise<Browser>|null=null;
 // The server's browser has no Hebrew fonts: Liberation Sans (Arial's shapes, with Hebrew) goes where it looks for fonts.
 async function fonts(){const dir='/tmp/fonts';await mkdir(dir,{recursive:true});
+ // fontconfig needs its own settings file there, or no font is found at all (text then has no size and pages come out empty).
+ try{await access(join(dir,'fonts.conf'));}catch{await writeFile(join(dir,'fonts.conf'),'<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><dir>/tmp/fonts</dir><cachedir>/tmp/fonts-cache/</cachedir><config></config></fontconfig>');}
  for(const f of ['LiberationSans-Regular.ttf','LiberationSans-Bold.ttf']){const to=join(dir,f);try{await access(to);}catch{await copyFile(join(process.cwd(),'lib','fonts',f),to);}}}
 async function browser(){if(!open)open=(async()=>{const puppeteer=(await import('puppeteer-core')).default;
   if(process.env.CHROME_PATH)return puppeteer.launch({executablePath:process.env.CHROME_PATH,args:['--no-sandbox'],headless:true});
