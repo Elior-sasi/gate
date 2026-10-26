@@ -300,7 +300,8 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  if(!configured||!user)return <main className="app">{splashEl}{top(null)}
   <section className="panel empty"><TicketIcon size={44}/><h2>כל הכרטיסים שלך במקום אחד</h2><p>{configured?'התחבר עם Google כדי לאסוף את מיילי הכרטיסים מ-Gmail - הופעות, הצגות, סרטים והרצאות.':'חסרים מפתחות בשרת (AUTH_GOOGLE_SECRET, AUTH_SECRET).'}</p><form action={login}><GoogleButton label="התחבר עם Google" disabled={!configured}/></form></section>
   <p className="footnote">קריאה בלבד מ-Gmail. תוכן המיילים לא נשמר.</p></main>;
- const list=filt==='next'?next:filt==='cx'?cxl:past;const week=next.filter(t=>daysTo(t)<=7);
+ const list=filt==='next'?next:filt==='cx'?cxl:past;// "השבוע" is the calendar week (Sunday to Saturday), not the next seven days.
+ const week=next.filter(t=>daysTo(t)<=6-new Date().getDay());
  return <main className={'app'+(sel?' detailOn':'')+(size===1?' large':size===2?' xlarge':'')}>
   {splashEl}
   {pull>0&&!sel&&<div className={'ptr'+(pull>=80?' ready':'')} style={{transform:'translate(-50%,'+Math.max(0,pull-46)+'px)',opacity:Math.min(1,pull/80)}} aria-hidden="true"><RefreshCw style={{transform:'rotate('+pull*3+'deg)'}}/></div>}
