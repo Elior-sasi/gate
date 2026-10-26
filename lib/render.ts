@@ -35,7 +35,10 @@ export async function renderPage(url:string,timeout=22000):Promise<{data:Buffer;
    const st=document.createElement('style');st.textContent=`html,body,#__nuxt,#__layout,#app,.v-application,.v-application--wrap,.v-main,.v-main__wrap,.content-container,.edocument-root,.edocument-content-root,.swiper-container,.swiper-wrapper,.swiper-slide,.ticket-slide{background:transparent!important;background-image:none!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
     .swiper-wrapper{transform:none!important;display:flex!important;flex-direction:column!important;align-items:center!important;gap:28px!important}
     .swiper-slide{width:430px!important;margin:0!important;transform:none!important;opacity:1!important;visibility:visible!important}
-    .swiper-pagination,.swiper-button-prev,.swiper-button-next,#footer-logos-container,.safe-area-top-strip,.swiper-notification{display:none!important}`;
+    .swiper-pagination,.swiper-button-prev,.swiper-button-next,#footer-logos-container,.safe-area-top-strip,.swiper-notification{display:none!important}
+    .__keepbg,.__keepbg::before,.__keepbg::after{background:transparent!important;background-image:none!important;box-shadow:none!important}.__keepbg::before,.__keepbg::after{display:none!important}`;
+   // Every element around the tickets loses its own background too (themes paint it on wrappers and their ::before).
+   for(const c of cards){let e=c.parentElement;while(e){e.classList.add('__keepbg');e=e.parentElement;}}
    document.head.appendChild(st);window.scrollTo(0,0);
    const rs=cards.map(c=>c.getBoundingClientRect()).filter(r=>r.width>50&&r.height>50);if(!rs.length)return null;
    const x=Math.max(0,Math.min(...rs.map(r=>r.left))-14),y=Math.max(0,Math.min(...rs.map(r=>r.top))-14);
