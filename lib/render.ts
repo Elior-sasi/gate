@@ -13,7 +13,7 @@ async function fonts(){const dir='/tmp/fonts';await mkdir(dir,{recursive:true});
 async function browser(){if(!open)open=(async()=>{const puppeteer=(await import('puppeteer-core')).default;
   if(process.env.CHROME_PATH)return puppeteer.launch({executablePath:process.env.CHROME_PATH,args:['--no-sandbox'],headless:true});
   await fonts();const chromium=(await import('@sparticuz/chromium')).default;
-  return puppeteer.launch({executablePath:await chromium.executablePath(),args:chromium.args,headless:true});})();
+  return puppeteer.launch({executablePath:await chromium.executablePath(),args:chromium.args,headless:'shell'});})();
  return open;}
 export const browserForDiag=()=>browser();
 export async function closeBrowser(){const b=open;open=null;if(b)await (await b).close().catch(()=>{});}
