@@ -216,7 +216,10 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   const added=waiting.map(x=>{const m=matchSms(storeRef.current.tickets,fix(x));return m&&x.file&&!m.event.files.some(g=>g.id===x.file!.id)?m.event.title:'';}).find(Boolean)||'';
   setStore(s=>{let tickets=s.tickets;for(const x of waiting){const m=matchSms(tickets,fix(x));if(!m)continue;
     // The page could not be copied (built by scripts, or it asked to sign in): the SMS link itself is added to the event instead.
-    if(!x.file){if(waiting.some(y=>y.url===x.url&&y.file))continue;tickets=tickets.map(t=>t.key!==m.event.key||t.links.some(l=>l.url===x.url)?t:{...t,links:[{label:'הכרטיס מ-SMS',url:x.url},...t.links].slice(0,5)});continue;}
+    if(!x.file){if(waiting.some(y=>y.url===x.url&&y.file))continue;const gone='sms'+new Date(x.at).getTime();
+     tickets=tickets.map(t=>t.key!==m.event.key?t:{...t,files:t.files.filter(g=>g.msg!==gone),links:t.links.some(l=>l.url===x.url)?t.links:[{label:'הכרטיס מ-SMS',url:x.url},...t.links].slice(0,5)});continue;}
+    // The same ticket sent (or pasted) twice: only the newest copy is kept.
+    if(waiting.some(y=>y!==x&&y.url===x.url&&y.file&&new Date(y.at).getTime()>new Date(x.at).getTime())){const old='sms'+new Date(x.at).getTime();tickets=tickets.map(t=>t.files.some(g=>g.msg===old)?{...t,files:t.files.filter(g=>g.msg!==old)}:t);continue;}
     const at=new Date(x.at).getTime();const f:TFile={...x.file,msg:'sms'+at,at,...(m.order?{order:m.order}:{})};
     // Same order: the SMS ticket is the newer one, so the older file of that order steps aside (it stays known, not shown),
     // and its seats (read from the ticket itself) replace that order's seats. The bare SMS link, if added before, goes.

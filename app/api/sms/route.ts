@@ -13,13 +13,17 @@ export async function GET(req:NextRequest){let id='';try{id=(await pushIdentity(
  // Every ticket of the last 60 days, each time (not handed over once): the app adds them again after a rescan, or on a new phone.
  await sql`delete from gate_sms where user_id=${id} and created_at<now()-interval '60 days'`;
  const rows=await sql`select id,item,created_at from gate_sms where user_id=${id} order by created_at`;
- // Tickets from pres.global kept in an older drawing are drawn again in the current one (the cinema's own ticket layout).
- for(const r of rows){const it=r.item as {url?:string;file?:{id:string;type:string}|null;v?:number};if(!it?.url||!it.file||it.v===8||!presApi(it.url))continue;
-  try{const p=await snapshot(it.url,'כרטיס');if(why)await sql`insert into gate_meta(k,v) values(${'keepdbg:sms '+why.slice(0,170)},now()) on conflict(k) do update set v=now()`;if(!p||p.type==='image/svg+xml'){const item={...it,v:8};await sql`update gate_sms set item=${JSON.stringify(item)} where id=${r.id}`;r.item=item;continue;}const k=newId();const data=p.data;
-   await sql`insert into gate_kept(id,user_id,url_key,msg,type,name,data,expires) values(${k},${id},${keyOf(id+'|'+it.url+'|v8')},${'sms'},${p.type},${p.name},${data},${new Date(Date.now()+120*864e5).toISOString()})`;
-   const item={...it,v:8,file:{id:'k_'+k,name:p.name,type:p.type,size:Math.round(data.length*0.75)},...(p.info?{info:p.info}:{})};
-   await sql`delete from gate_kept where id=${it.file.id.slice(2)} and user_id=${id}`;
-   await sql`update gate_sms set item=${JSON.stringify(item)} where id=${r.id}`;r.item=item;}catch{}}
+ // Tickets from pres.global kept in an older way, or whose kept copy is gone, are kept again (as the cinema's page shows them).
+ // One page per call (a page takes the server's browser several seconds); the rest on the next call. The old copy stays until it expires.
+ let budget=1;const made=new Map<string,Record<string,unknown>>();
+ for(const r of rows){const it=r.item as {url?:string;file?:{id:string;type:string}|null;v?:number};if(!it?.url||!presApi(it.url))continue;
+  const have=!!it.file&&(await sql`select 1 from gate_kept where id=${it.file.id.slice(2)} and user_id=${id}`).length>0;if(it.v===8&&have)continue;
+  try{let file=made.get(it.url) as {file:{id:string;name:string;type:string;size:number};info?:unknown}|undefined;
+   if(!file){if(budget<=0)continue;budget--;const p=await snapshot(it.url,'כרטיס');if(why)await sql`insert into gate_meta(k,v) values(${'keepdbg:sms '+why.slice(0,170)},now()) on conflict(k) do update set v=now()`;
+    if(!p){if(!have){const item={...it,file:null};await sql`update gate_sms set item=${JSON.stringify(item)} where id=${r.id}`;r.item=item;}continue;}
+    const k=newId();await sql`insert into gate_kept(id,user_id,url_key,msg,type,name,data,expires) values(${k},${id},${keyOf(id+'|'+it.url+'|v8')},${'sms'},${p.type},${p.name},${p.data},${new Date(Date.now()+120*864e5).toISOString()})`;
+    file={file:{id:'k_'+k,name:p.name,type:p.type,size:Math.round(p.data.length*0.75)},...(p.info?{info:p.info}:{})};made.set(it.url,file);}
+   const item={...it,v:8,...file};await sql`update gate_sms set item=${JSON.stringify(item)} where id=${r.id}`;r.item=item;}catch{}}
  await closeBrowser();
  const seen=await sql`select k,v from gate_meta where k like ${'smsin:'+id+':%'} order by v desc limit 1`;const dbg=(await sql`select k from gate_meta where k like ${'smsdbg:'+id+':%'} order by v desc limit 1`)[0];
  return Response.json({items:rows.map(r=>({...(r.item as object),at:r.created_at})),last:seen[0]?{at:seen[0].v,kind:String(seen[0].k).split(':').pop(),...(dbg?{shape:String(dbg.k).split(':')[2],raw:Number(String(dbg.k).split(':')[3])}:{})}:null},{headers:H});}
