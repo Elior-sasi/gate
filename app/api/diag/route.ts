@@ -8,6 +8,12 @@ export async function GET(){const t=Date.now();
    return {inner:document.body.innerText.length,w:s.getBoundingClientRect().width,h:a.getBoundingClientRect().height,disp:getComputedStyle(document.body).display};});
   await p.setViewport({width:430,height:860,deviceScaleFactor:2,isMobile:true,hasTouch:true});await p.setContent('<html><body style="margin:0">'+'<div style="height:300px;border:4px solid #000;margin:10px;font:30px Arial">כרטיס</div>'.repeat(8)+'</body></html>');
   let shot=0;try{shot=(await p.screenshot({fullPage:true,type:'png'})).length;}catch(e){shot=-1;(r as Record<string,unknown>).shotErr=String(e).slice(0,120);}(r as Record<string,unknown>).shot=shot;
+  // A real pres.global page (sizes and errors only).
+  try{const q=await b.newPage();await q.setViewport({width:430,height:860,deviceScaleFactor:2,isMobile:true,hasTouch:true});
+   await q.goto(process.env.DIAG_URL||'https://tickets.cinema-city.co.il/',{waitUntil:'networkidle2',timeout:20000});await new Promise(x=>setTimeout(x,1500));
+   const m=await q.evaluate(()=>({h:document.documentElement.scrollHeight,w:document.documentElement.scrollWidth,t:(document.body?.textContent||'').trim().length,imgs:document.images.length}));(r as Record<string,unknown>).page=m;
+   try{(r as Record<string,unknown>).pshot=(await q.screenshot({fullPage:true,type:'png'})).length;}catch(e){(r as Record<string,unknown>).pshotErr=String(e).slice(0,160);}
+   try{(r as Record<string,unknown>).vshot=(await q.screenshot({type:'png'})).length;}catch(e){(r as Record<string,unknown>).vshotErr=String(e).slice(0,160);}}catch(e){(r as Record<string,unknown>).pageErr=String(e).slice(0,160);}
   const fs=await import('node:fs');let fonts:string[]=[];try{fonts=fs.readdirSync('/tmp/fonts');}catch{}
   await closeBrowser();return Response.json({ok:true,ms:Date.now()-t,r,fonts,fc:process.env.FONTCONFIG_PATH||''},{headers:{'Cache-Control':'no-store'}});}
  catch(e){await closeBrowser();return Response.json({ok:false,ms:Date.now()-t,err:String(e).slice(0,300)});}}
