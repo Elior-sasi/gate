@@ -1,11 +1,13 @@
 name: Unstage diag
 on:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   diag:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
       - run: |
-          curl -sS --max-time 90 https://gatetickets.vercel.app/api/diag > t.txt
-          i=0; split -b 3500 t.txt part_; for f in part_*; do i=$((i+1)); echo "::notice title=p$i::$(cat $f | tr '\n' '|')"; done
+          curl -sS --max-time 90 -o shot.png -w '%{http_code} %{size_download}' https://gatetickets.vercel.app/api/diag > meta.txt; echo "::notice title=diag::$(cat meta.txt)"
+          git init -q d && cd d && git checkout -q -b diag && cp ../shot.png . && git add shot.png && git -c user.name=diag -c user.email=diag@x commit -qm diag && git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" diag

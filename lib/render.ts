@@ -29,6 +29,19 @@ export async function renderPage(url:string,timeout=22000):Promise<{data:Buffer;
   // A bot check or block page (Cloudflare and the like) is not the ticket.
   const blocked=await page.evaluate(()=>/you have been blocked|attention required|just a moment|checking your browser|verify you are human|access denied|cf-error|ray id/i.test((document.title||'')+' '+(document.body?.textContent||'').slice(0,3000)));
   if(blocked){renderWhy='blocked '+new URL(page.url()).hostname;return null;}if(text<40){renderWhy='empty '+text+' '+(await page.title()).slice(0,40)+' '+(await page.evaluate(()=>document.documentElement.outerHTML.length));return null;}
+  // A page that shows its tickets one at a time (a slider, as pres.global does): the tickets are laid out one under the other
+  // and only they are kept, on a transparent background, so the app shows them like the tickets that came as files.
+  const box=await page.evaluate(()=>{const cards=[...document.querySelectorAll('.swiper-slide .card, .swiper-slide .ticket')];if(!cards.length)return null;
+   const st=document.createElement('style');st.textContent=`html,body,#__nuxt,#__layout,#app,.v-application,.v-application--wrap,.v-main,.v-main__wrap,.content-container,.edocument-root,.edocument-content-root,.swiper-container,.swiper-wrapper,.swiper-slide,.ticket-slide{background:transparent!important;background-image:none!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+    .swiper-wrapper{transform:none!important;display:flex!important;flex-direction:column!important;align-items:center!important;gap:28px!important}
+    .swiper-slide{width:430px!important;margin:0!important;transform:none!important;opacity:1!important;visibility:visible!important}
+    .swiper-pagination,.swiper-button-prev,.swiper-button-next,#footer-logos-container,.safe-area-top-strip,.swiper-notification{display:none!important}`;
+   document.head.appendChild(st);window.scrollTo(0,0);
+   const rs=cards.map(c=>c.getBoundingClientRect()).filter(r=>r.width>50&&r.height>50);if(!rs.length)return null;
+   const x=Math.max(0,Math.min(...rs.map(r=>r.left))-14),y=Math.max(0,Math.min(...rs.map(r=>r.top))-14);
+   return {x,y,width:Math.max(...rs.map(r=>r.right))+14-x,height:Math.max(...rs.map(r=>r.bottom))+14-y,n:rs.length};});
+  if(box){await new Promise(r=>setTimeout(r,400));const shot=Buffer.from(await page.screenshot({type:'png',omitBackground:true,captureBeyondViewport:true,clip:{x:box.x,y:box.y,width:box.width,height:box.height}}));
+   if(shot.length<2_400_000)return {data:shot,type:'image/png'};}
   let data=Buffer.from(await page.screenshot({fullPage:true,type:'png'}));let type='image/png';
   if(data.length>1_800_000){data=Buffer.from(await page.screenshot({fullPage:true,type:'jpeg',quality:88}));type='image/jpeg';}
   return data.length>2_400_000?null:{data,type};}
