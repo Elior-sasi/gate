@@ -3,7 +3,7 @@ import {z} from 'zod';
 import {identity} from '@/lib/identity';
 import {gmailClient,ticketLinks,type Message} from '@/lib/gmail';
 import {db,dbOn} from '@/lib/push';
-import {snapshot,keyOf} from '@/lib/keep';
+import {snapshot,keyOf,shell} from '@/lib/keep';
 import {ilMoment} from '@/lib/notify';
 import {newId} from '@/lib/share';
 export const dynamic='force-dynamic';export const maxDuration=60;
@@ -18,7 +18,9 @@ export async function POST(req:NextRequest){
   await sql`delete from gate_kept where expires<now()`;
   const out:{msg:string;url:string;file?:{msg:string;id:string;name:string;type:string;size:number};failed?:boolean}[]=[];
   for(const it of items){const key=keyOf(u.id+'|'+it.url);
-   const old=(await sql`select id,type,name,length(data) as n from gate_kept where user_id=${u.id} and url_key=${key}`)[0];
+   let old:Record<string,unknown>|undefined=(await sql`select id,type,name,length(data) as n from gate_kept where user_id=${u.id} and url_key=${key}`)[0];
+   // An earlier copy that is only an empty app shell (pres.global before it was drawn from its data) is made again.
+   if(old&&old.type==='text/html'){const d=(await sql`select data from gate_kept where id=${old.id}`)[0];if(d&&shell(Buffer.from(String(d.data),'base64').toString('utf8'))){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}}
    if(old){out.push({msg:it.msg,url:it.url,file:{msg:it.msg,id:'k_'+old.id,name:String(old.name),type:String(old.type),size:Math.round(Number(old.n)*0.75)}});continue;}
    try{const m=await gmail('messages/'+encodeURIComponent(it.msg)+'?format=full') as Message;
     if(!ticketLinks(m).some(l=>l.url===it.url)){out.push({msg:it.msg,url:it.url,failed:true});continue;}

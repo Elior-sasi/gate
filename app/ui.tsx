@@ -183,16 +183,19 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  useEffect(()=>{if(!user||user.id==='demo'||busy||keeping.current)return;
   const TRY='gate:kept-try:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
   // Past events too (once each): many sellers' links still open for a while, and then "הצג הכל" works for them as well.
+  // Copies kept as a page before pages built by scripts were caught are checked once more (an empty one is made again).
+  const V2='gate:kept-v2:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
   const todo=store.tickets.filter(t=>!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
-   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
+   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&(f.type!=='text/html'||v2.includes(l.url)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
    .filter(x=>x.past?!tried[x.url]:Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
   if(!todo.length)return;keeping.current=true;
   void (async()=>{try{for(let i=0;i<todo.length;i+=4){const part=todo.slice(i,i+4);
     const r=await fetch('/api/keep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:part.map(({msg,url,label,start})=>({msg,url,label,start}))})}).catch(()=>null);
     const d=r?await r.json().catch(()=>null):null;const got=(d?.kept||[]).filter((k:{file?:TFile})=>k.file) as {url:string;file:TFile}[];
     // Only a link that could not be copied waits a day before the next try; one already kept comes back at once.
-    for(const x of part)if(!got.some(k=>k.url===x.url))tried[x.url]=Date.now();try{localStorage.setItem(TRY,JSON.stringify(tried));}catch{}if(!got.length)continue;
-    setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const add=got.filter(k=>part.some(x=>x.key===t.key&&x.url===k.url)).map(k=>k.file).filter(f=>!t.files.some(g=>g.id===f.id));return add.length?{...t,files:[...t.files,...add]}:t;})};save(KEY(user.id),n);return n;});}}
+    for(const x of part){if(!v2.includes(x.url))v2.push(x.url);if(!got.some(k=>k.url===x.url))tried[x.url]=Date.now();}try{localStorage.setItem(V2,JSON.stringify(v2.slice(-300)));}catch{}try{localStorage.setItem(TRY,JSON.stringify(tried));}catch{}if(!got.length)continue;
+    setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const add=got.filter(k=>part.some(x=>x.key===t.key&&x.url===k.url)).map(k=>k.file).filter(f=>!t.files.some(g=>g.id===f.id));const stem=(n:string)=>n.replace(/\.\w+$/,'');
+     return add.length?{...t,files:[...t.files.filter(g=>!(g.id.startsWith('k_')&&add.some(a=>a.msg===g.msg&&stem(a.name)===stem(g.name)))),...add]}:t;})};save(KEY(user.id),n);return n;});}}
    finally{keeping.current=false;}})();},[user,busy,store.tickets]);
  // Tickets that came by SMS (forwarded by the iPhone Shortcut, or pasted): the kept copy is added to its event as the newest ticket of that order.
  // One that matches no event yet waits on the phone until a scan brings the event.

@@ -9,6 +9,9 @@ async function grab(url:string,limit=MAX){const r=await fetch(url,{headers:{'Use
  if(!r.ok)throw new Error('HTTP '+r.status);const len=Number(r.headers.get('content-length')||0);if(len>limit)throw new Error('big');
  const buf=Buffer.from(await r.arrayBuffer());if(buf.length>limit)throw new Error('big');return {buf,type:(r.headers.get('content-type')||'').split(';')[0].trim().toLowerCase(),url:r.url||url};}
 const abs=(u:string,base:string)=>{try{return new URL(u.replace(/&amp;/g,'&'),base).href;}catch{return '';}};
+// A page that is only an app shell (Nuxt, React, Vue: an empty mount point filled by scripts) shows nothing without its scripts.
+export function shell(html:string){const body=html.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'');const text=body.replace(/<[^>]+>/g,' ').replace(/&\w+;/g,' ').replace(/\s+/g,' ').trim();
+ return /id=["'](?:__nuxt|__next|app|root)["']/.test(html)&&text.length<200||/pres\.global|presglobal/i.test(html)&&text.length<200;}
 export type Kept={type:string;data:string;name:string;info?:PresInfo};
 export const keyOf=(url:string)=>createHash('sha256').update(url).digest('base64url').slice(0,22);
 export async function snapshot(url:string,label:string):Promise<Kept|null>{
@@ -16,9 +19,11 @@ export async function snapshot(url:string,label:string):Promise<Kept|null>{
  // Pages built by scripts that have a known data source: the ticket is drawn from the data (lib/pres).
  if(presApi(url)){const p=await presTicket(url).catch(()=>null);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
  const g=await grab(url);
+ // A mail link that leads (through a redirect) to pres.global: drawn from its data too.
+ if(presApi(g.url)){const p=await presTicket(g.url).catch(()=>null);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
  if(g.type==='application/pdf'||/^image\/(png|jpe?g|gif|webp)$/.test(g.type))return {type:g.type,data:g.buf.toString('base64'),name:label+(g.type==='application/pdf'?'.pdf':'.png')};
  if(!/html/.test(g.type))return null;
- let h=g.buf.toString('utf8');
+ let h=g.buf.toString('utf8');if(shell(h))return null;
  // No scripts, frames, forms or event handlers: the copy is something to look at, not run.
  h=h.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<(iframe|object|embed|form)[\s\S]*?<\/\1>/gi,'').replace(/<(?:iframe|object|embed|base)\b[^>]*>/gi,'').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,'').replace(/javascript:/gi,'');
  // Styles inside the page (at most a few files), so it looks the same later.
