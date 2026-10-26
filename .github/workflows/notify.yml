@@ -8,4 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - run: curl -fsS --max-time 90 https://gatetickets.vercel.app/api/cron
+      - run: |
+          r=$(curl -fsS --max-time 90 https://gatetickets.vercel.app/api/cron)
+          echo "$r"
+          echo "::notice title=cron::$r"
