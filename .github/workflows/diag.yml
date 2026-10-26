@@ -1,0 +1,11 @@
+name: Unstage diag
+on:
+  workflow_dispatch:
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: |
+          curl -sS --max-time 90 https://gatetickets.vercel.app/api/diag > t.txt
+          i=0; split -b 3500 t.txt part_; for f in part_*; do i=$((i+1)); echo "::notice title=p$i::$(cat $f | tr '\n' '|')"; done

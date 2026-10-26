@@ -15,6 +15,7 @@ async function browser(){if(!open)open=(async()=>{const puppeteer=(await import(
   await fonts();const chromium=(await import('@sparticuz/chromium')).default;
   return puppeteer.launch({executablePath:await chromium.executablePath(),args:chromium.args,headless:'shell'});})();
  return open;}
+export const browserForDiag=()=>browser();
 export async function closeBrowser(){const b=open;open=null;if(b)await (await b).close().catch(()=>{});}
 export let renderWhy='';
 export async function renderPage(url:string,timeout=22000):Promise<{data:Buffer;type:string}|null>{renderWhy='';let page;
