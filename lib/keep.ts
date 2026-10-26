@@ -2,7 +2,7 @@
 // some days after the event, or before the ticket is sent on to someone, so the ticket is copied while the link still opens.
 // PDFs and images are kept as they are; a ticket page is kept as one self-contained page (its pictures and styles inside it, no scripts).
 import {createHash} from 'node:crypto';
-import {presApi,presTicket,type PresInfo} from '@/lib/pres';
+import {presApi,presPage,presTicket,type PresInfo} from '@/lib/pres';
 import {renderPage,renderWhy} from '@/lib/render';
 const UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const MAX=2_500_000;
@@ -19,7 +19,7 @@ export let why='';const mask=(u:string)=>{try{const x=new URL(u);return x.hostna
 // its details (seats, time) come from the page's data. If the browser cannot open it, the ticket is drawn from the data instead.
 async function presCopy(u:string,label:string):Promise<Kept|null>{
  const p=await presTicket(u).catch(e=>{why='pres-error '+mask(u)+' '+(e instanceof Error?e.message:'');return null;});
- const r=await renderPage(u);if(r)return {type:r.type,data:r.data.toString('base64'),name:label+(r.type==='image/png'?'.png':'.jpg'),info:p?.info};
+ const r=await renderPage(presPage(u)||u);if(r)return {type:r.type,data:r.data.toString('base64'),name:label+(r.type==='image/png'?'.png':'.jpg'),info:p?.info};
  why=(why?why+' / ':'')+'render '+renderWhy;
  return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
 export type Kept={type:string;data:string;name:string;info?:PresInfo};

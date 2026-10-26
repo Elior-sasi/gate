@@ -25,7 +25,10 @@ export async function renderPage(url:string,timeout=22000):Promise<{data:Buffer;
   // Wait for the ticket itself: text on the page and its pictures (the barcode) loaded.
   await page.waitForFunction(()=>document.body&&(document.body.textContent||'').trim().length>40&&[...document.images].every(i=>i.complete),{timeout:10000}).catch(()=>{});
   await new Promise(r=>setTimeout(r,700));
-  const text=await page.evaluate(()=>(document.body?.textContent||'').replace(/\s+/g,' ').trim().length);if(text<40){renderWhy='empty '+text+' '+(await page.title()).slice(0,40)+' '+(await page.evaluate(()=>document.documentElement.outerHTML.length));return null;}
+  const text=await page.evaluate(()=>(document.body?.textContent||'').replace(/\s+/g,' ').trim().length);
+  // A bot check or block page (Cloudflare and the like) is not the ticket.
+  const blocked=await page.evaluate(()=>/you have been blocked|attention required|just a moment|checking your browser|verify you are human|access denied|cf-error|ray id/i.test((document.title||'')+' '+(document.body?.textContent||'').slice(0,3000)));
+  if(blocked){renderWhy='blocked '+new URL(page.url()).hostname;return null;}if(text<40){renderWhy='empty '+text+' '+(await page.title()).slice(0,40)+' '+(await page.evaluate(()=>document.documentElement.outerHTML.length));return null;}
   let data=Buffer.from(await page.screenshot({fullPage:true,type:'png'}));let type='image/png';
   if(data.length>1_800_000){data=Buffer.from(await page.screenshot({fullPage:true,type:'jpeg',quality:88}));type='image/jpeg';}
   return data.length>2_400_000?null:{data,type};}

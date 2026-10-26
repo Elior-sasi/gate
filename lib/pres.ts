@@ -6,6 +6,8 @@ export type PresInfo={title?:string;start?:string;hall?:string;venue?:string;add
 const UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const SITE=/^[a-z0-9-]{2,30}$/i,DOC=/^[0-9a-f-]{20,40}$/i;
 // The data address for a ticket link, or null when the link is not a pres.global ticket.
+// The ticket page itself on the cinema's ticket site (not the prestickets.com short address, which sits behind Cloudflare).
+export function presPage(url:string):string|null{const a=presApi(url);return a?a.replace('/api/edocument/','/edocument/').replace('?id=','/?id='):null;}
 export function presApi(url:string):string|null{let u:URL;try{u=new URL(url);}catch{return null;}
  const id=u.searchParams.get('id')||'';if(!/^\d{6,30}$/.test(id))return null;const p=u.pathname.split('/').filter(Boolean);
  if(/(^|\.)prestickets\.com$/i.test(u.hostname)&&SITE.test(p[0]||'')&&DOC.test(p[1]||''))return `https://${p[0]}.pres.global/api/edocument/${p[1]}?id=${id}`;
