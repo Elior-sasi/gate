@@ -1,13 +1,8 @@
-import {closeBrowser} from '@/lib/render';
+import {renderPage,closeBrowser,renderWhy} from '@/lib/render';
+import {presPage} from '@/lib/pres';
 export const dynamic='force-dynamic';export const maxDuration=60;
-// Checks that the server's browser (lib/render) starts and lays out text: a fixed test page only, nothing else.
-export async function GET(){const t=Date.now();
- try{const {browserForDiag}=await import('@/lib/render');const b=await browserForDiag();const p=await b.newPage();
-  await p.setContent('<html dir="rtl"><body><p id="a" style="font:20px Arial">שלום עולם hello world 123</p></body></html>');
-  const r=await p.evaluate(()=>{const a=document.getElementById('a')!;const s=document.createElement('span');s.textContent='שלום hello';document.body.appendChild(s);
-   return {inner:document.body.innerText.length,w:s.getBoundingClientRect().width,h:a.getBoundingClientRect().height,disp:getComputedStyle(document.body).display};});
-  await p.setViewport({width:430,height:860,deviceScaleFactor:2,isMobile:true,hasTouch:true});await p.setContent('<html><body style="margin:0">'+'<div style="height:300px;border:4px solid #000;margin:10px;font:30px Arial">כרטיס</div>'.repeat(8)+'</body></html>');
-  let shot=0;try{shot=(await p.screenshot({fullPage:true,type:'png'})).length;}catch(e){shot=-1;(r as Record<string,unknown>).shotErr=String(e).slice(0,120);}(r as Record<string,unknown>).shot=shot;
-  const fs=await import('node:fs');let fonts:string[]=[];try{fonts=fs.readdirSync('/tmp/fonts');}catch{}
-  await closeBrowser();return Response.json({ok:true,ms:Date.now()-t,r,fonts,fc:process.env.FONTCONFIG_PATH||''},{headers:{'Cache-Control':'no-store'}});}
- catch(e){await closeBrowser();return Response.json({ok:false,ms:Date.now()-t,err:String(e).slice(0,300)});}}
+// Temporary: can the server browser open a pres.global ticket page (sizes and reasons only).
+export async function GET(){const t=Date.now();const out:Record<string,unknown>={};
+ for(const [k,u] of [['jer','https://prestickets.com/jer-cin/3c603657-1dcb-4c2d-b007-e37c98a21729/?id=209803927955490'],['cc','https://tickets.cinema-city.co.il/edocument/d08b133e-e19e-4285-a390-14a3652c8e6f/?id=864134394615752']]){
+  const r=await renderPage(presPage(u)||u);out[k]={size:r?.data.length||0,why:renderWhy};}
+ await closeBrowser();return Response.json({ms:Date.now()-t,out},{headers:{'Cache-Control':'no-store'}});}
