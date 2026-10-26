@@ -52,6 +52,6 @@ export async function presSvg(info:PresInfo,ts:T[]):Promise<string>{
  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${h}" width="${W}" height="${h}" font-family="Arial,Helvetica,-apple-system,sans-serif">${cards.join('')}</svg>`;}
 export async function presTicket(url:string):Promise<{svg:string;info:PresInfo}|null>{const api=presApi(url);if(!api)return null;
  const r=await fetch(api+'&_='+Date.now(),{headers:{'User-Agent':UA,Accept:'application/json','Accept-Language':'he-IL,he;q=0.9'},signal:AbortSignal.timeout(12000)});
- if(!r.ok)return null;const j=await r.json().catch(()=>null) as {document?:{tickets?:T[];reservationIsCancelled?:boolean}}|null;const doc=j?.document;if(!doc)return null;
+ if(!r.ok)throw new Error('api '+r.status);const j=await r.json().catch(()=>null) as {document?:{tickets?:T[];reservationIsCancelled?:boolean}}|null;const doc=j?.document;if(!doc)return null;
  const info=presInfo(doc);if(!info)return null;const ts=(doc.tickets||[]).filter(t=>t&&(t.barcode||t.reservationIdentifier));
  return {svg:await presSvg(info,ts),info};}

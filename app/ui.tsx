@@ -184,7 +184,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   const TRY='gate:kept-try:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
   // Past events too (once each): many sellers' links still open for a while, and then "הצג הכל" works for them as well.
   // Copies kept as a page before pages built by scripts were caught are checked once more (an empty one is made again).
-  const V2='gate:kept-v2:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
+  const V2='gate:kept-v3:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
   const todo=store.tickets.filter(t=>!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
    .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&(f.type!=='text/html'||v2.includes(l.url)))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
    .filter(x=>x.past?!tried[x.url]:Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
@@ -192,6 +192,10 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   void (async()=>{try{for(let i=0;i<todo.length;i+=4){const part=todo.slice(i,i+4);
     const r=await fetch('/api/keep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:part.map(({msg,url,label,start})=>({msg,url,label,start}))})}).catch(()=>null);
     const d=r?await r.json().catch(()=>null):null;const got=(d?.kept||[]).filter((k:{file?:TFile})=>k.file) as {url:string;file:TFile}[];
+    // A copy the server found empty and could not make again is taken away (the link itself stays).
+    const drop=(d?.kept||[]).filter((k:{drop?:boolean})=>k.drop).map((k:{url:string})=>k.url) as string[];
+    if(drop.length)setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const gone=part.filter(x=>x.key===t.key&&drop.includes(x.url)).map(x=>x.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40));
+      return gone.length&&t.files.some(f=>f.id.startsWith('k_')&&gone.some(l=>f.name.startsWith(l)))?{...t,files:t.files.filter(f=>!(f.id.startsWith('k_')&&gone.some(l=>f.name.startsWith(l))))}:t;})};save(KEY(user.id),n);return n;});
     // Only a link that could not be copied waits a day before the next try; one already kept comes back at once.
     for(const x of part){if(!v2.includes(x.url))v2.push(x.url);if(!got.some(k=>k.url===x.url))tried[x.url]=Date.now();}try{localStorage.setItem(V2,JSON.stringify(v2.slice(-300)));}catch{}try{localStorage.setItem(TRY,JSON.stringify(tried));}catch{}if(!got.length)continue;
     setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const add=got.filter(k=>part.some(x=>x.key===t.key&&x.url===k.url)).map(k=>k.file).filter(f=>!t.files.some(g=>g.id===f.id));const stem=(n:string)=>n.replace(/\.\w+$/,'');

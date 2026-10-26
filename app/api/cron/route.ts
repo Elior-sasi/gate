@@ -8,8 +8,10 @@ export async function GET(){
  if(!dbOn())return Response.json({ok:false,reason:'no-db'});
  const {sql,ready}=db();await ready;
  const last=(await sql`select v from gate_meta where k='cron'`)[0]?.v;
- if(last&&Date.now()-new Date(last as string).getTime()<12*60000)return Response.json({ok:true,skipped:true});
+ if(last&&Date.now()-new Date(last as string).getTime()<12*60000)return Response.json({ok:true,skipped:true,keep:(await sql`select k from gate_meta where k like 'keepdbg:%' order by v desc limit 8`).map(r=>String(r.k).slice(8))});
  await sql`insert into gate_meta(k,v) values('cron',now()) on conflict(k) do update set v=now()`;
  const users=await sql`select user_id,refresh,subs,tickets,hidden,seen,sent,checked_at from gate_users where jsonb_array_length(subs)>0 order by checked_at nulls first limit 30`;
  let sent=0,errors=0;for(const u of users){try{sent+=(await check(u as unknown as Row,sql as never)).sent;await watch(u as unknown as Row,sql as never).catch(()=>{});}catch{errors++;}}
- return Response.json({ok:true,users:users.length,sent,errors},{headers:{'Cache-Control':'no-store'}});}
+ // Why recent ticket copies failed (sites and page shapes only, numbers masked), to see which sellers need their own reader.
+ const dbg=(await sql`select k,v from gate_meta where k like 'keepdbg:%' order by v desc limit 8`).map(r=>String(r.k).slice(8));
+ return Response.json({ok:true,users:users.length,sent,errors,keep:dbg},{headers:{'Cache-Control':'no-store'}});}

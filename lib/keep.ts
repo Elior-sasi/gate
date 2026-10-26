@@ -12,18 +12,24 @@ const abs=(u:string,base:string)=>{try{return new URL(u.replace(/&amp;/g,'&'),ba
 // A page that is only an app shell (Nuxt, React, Vue: an empty mount point filled by scripts) shows nothing without its scripts.
 export function shell(html:string){const body=html.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<style[\s\S]*?<\/style>/gi,'');const text=body.replace(/<[^>]+>/g,' ').replace(/&\w+;/g,' ').replace(/\s+/g,' ').trim();
  return /id=["'](?:__nuxt|__next|app|root)["']/.test(html)&&text.length<200||/pres\.global|presglobal/i.test(html)&&text.length<200;}
+// Why the last copy failed, without anything personal (numbers and ids masked): for the server's own record.
+export let why='';const mask=(u:string)=>{try{const x=new URL(u);return x.hostname+x.pathname.replace(/[0-9a-f-]{16,}/gi,'<id>').replace(/\d{5,}/g,'<n>')+(x.search?'?'+[...x.searchParams.keys()].join('&'):'');}catch{return 'bad-url';}};
 export type Kept={type:string;data:string;name:string;info?:PresInfo};
 export const keyOf=(url:string)=>createHash('sha256').update(url).digest('base64url').slice(0,22);
 export async function snapshot(url:string,label:string):Promise<Kept|null>{
- if(!/^https?:\/\//i.test(url))return null;
+ why='';if(!/^https?:\/\//i.test(url))return null;
  // Pages built by scripts that have a known data source: the ticket is drawn from the data (lib/pres).
  if(presApi(url)){const p=await presTicket(url).catch(()=>null);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
  const g=await grab(url);
  // A mail link that leads (through a redirect) to pres.global: drawn from its data too.
- if(presApi(g.url)){const p=await presTicket(g.url).catch(()=>null);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
+ if(presApi(g.url)){const p=await presTicket(g.url).catch(e=>{why='pres-error '+mask(g.url)+' '+(e instanceof Error?e.message:'');return null;});if(!p&&!why)why='pres-empty '+mask(g.url);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
  if(g.type==='application/pdf'||/^image\/(png|jpe?g|gif|webp)$/.test(g.type))return {type:g.type,data:g.buf.toString('base64'),name:label+(g.type==='application/pdf'?'.pdf':'.png')};
- if(!/html/.test(g.type))return null;
- let h=g.buf.toString('utf8');if(shell(h))return null;
+ if(!/html/.test(g.type)){why='type '+g.type+' '+mask(g.url);return null;}
+ let h=g.buf.toString('utf8');
+ if(shell(h)){// An app shell may still name the ticket's data address (pres.global) inside it.
+  const m=h.match(/https?:\/\/(?:[a-z0-9-]+\.pres\.global\/edocument|prestickets\.com\/[a-z0-9-]+)\/[0-9a-f-]{20,40}\/?\?id=\d{6,30}/i)?.[0];
+  if(m&&presApi(m)){const p=await presTicket(m).catch(()=>null);if(p)return {type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info};}
+  why='shell '+mask(g.url)+' '+h.length;return null;}
  // No scripts, frames, forms or event handlers: the copy is something to look at, not run.
  h=h.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<(iframe|object|embed|form)[\s\S]*?<\/\1>/gi,'').replace(/<(?:iframe|object|embed|base)\b[^>]*>/gi,'').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,'').replace(/javascript:/gi,'');
  // Styles inside the page (at most a few files), so it looks the same later.
