@@ -3,6 +3,7 @@
 // PDFs and images are kept as they are; a ticket page is kept as one self-contained page (its pictures and styles inside it, no scripts).
 import {createHash} from 'node:crypto';
 import {presApi,presTicket,type PresInfo} from '@/lib/pres';
+import {renderPage,renderWhy} from '@/lib/render';
 const UA='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const MAX=2_500_000;
 async function grab(url:string,limit=MAX){const r=await fetch(url,{headers:{'User-Agent':UA,Accept:'*/*','Accept-Language':'he-IL,he;q=0.9,en;q=0.8'},redirect:'follow',signal:AbortSignal.timeout(12000)});
@@ -14,22 +15,31 @@ export function shell(html:string){const body=html.replace(/<script[\s\S]*?<\/sc
  return /id=["'](?:__nuxt|__next|app|root)["']/.test(html)&&text.length<200||/pres\.global|presglobal/i.test(html)&&text.length<200;}
 // Why the last copy failed, without anything personal (numbers and ids masked): for the server's own record.
 export let why='';const mask=(u:string)=>{try{const x=new URL(u);return x.hostname+x.pathname.replace(/[0-9a-f-]{16,}/gi,'<id>').replace(/\d{5,}/g,'<n>')+(x.search?'?'+[...x.searchParams.keys()].join('&'):'');}catch{return 'bad-url';}};
+// A pres.global ticket: the page itself, opened in the server's browser and kept as a picture (exactly as the cinema shows it);
+// its details (seats, time) come from the page's data. If the browser cannot open it, the ticket is drawn from the data instead.
+async function presCopy(u:string,label:string):Promise<Kept|null>{
+ const p=await presTicket(u).catch(e=>{why='pres-error '+mask(u)+' '+(e instanceof Error?e.message:'');return null;});
+ const r=await renderPage(u);if(r)return {type:r.type,data:r.data.toString('base64'),name:label+(r.type==='image/png'?'.png':'.jpg'),info:p?.info};
+ why=(why?why+' / ':'')+'render '+renderWhy;
+ return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
 export type Kept={type:string;data:string;name:string;info?:PresInfo};
 export const keyOf=(url:string)=>createHash('sha256').update(url).digest('base64url').slice(0,22);
 export async function snapshot(url:string,label:string):Promise<Kept|null>{
  why='';if(!/^https?:\/\//i.test(url))return null;
  // Pages built by scripts that have a known data source: the ticket is drawn from the data (lib/pres).
- if(presApi(url)){const p=await presTicket(url).catch(()=>null);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
+ if(presApi(url))return presCopy(url,label);
  const g=await grab(url);
  // A mail link that leads (through a redirect) to pres.global: drawn from its data too.
- if(presApi(g.url)){const p=await presTicket(g.url).catch(e=>{why='pres-error '+mask(g.url)+' '+(e instanceof Error?e.message:'');return null;});if(!p&&!why)why='pres-empty '+mask(g.url);return p?{type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info}:null;}
+ if(presApi(g.url))return presCopy(g.url,label);
  if(g.type==='application/pdf'||/^image\/(png|jpe?g|gif|webp)$/.test(g.type))return {type:g.type,data:g.buf.toString('base64'),name:label+(g.type==='application/pdf'?'.pdf':'.png')};
  if(!/html/.test(g.type)){why='type '+g.type+' '+mask(g.url);return null;}
  let h=g.buf.toString('utf8');
  if(shell(h)){// An app shell may still name the ticket's data address (pres.global) inside it.
   const m=h.match(/https?:\/\/(?:[a-z0-9-]+\.pres\.global\/edocument|prestickets\.com\/[a-z0-9-]+)\/[0-9a-f-]{20,40}\/?\?id=\d{6,30}/i)?.[0];
-  if(m&&presApi(m)){const p=await presTicket(m).catch(()=>null);if(p)return {type:'image/svg+xml',data:Buffer.from(p.svg,'utf8').toString('base64'),name:label+'.svg',info:p.info};}
-  why='shell '+mask(g.url)+' '+h.length;return null;}
+  if(m&&presApi(m))return presCopy(m,label);
+  // Any other page built by scripts: opened in the server's browser and kept as it looks.
+  const r=await renderPage(g.url);if(r)return {type:r.type,data:r.data.toString('base64'),name:label+(r.type==='image/png'?'.png':'.jpg')};
+  why='shell '+mask(g.url)+' '+renderWhy;return null;}
  // No scripts, frames, forms or event handlers: the copy is something to look at, not run.
  h=h.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/<(iframe|object|embed|form)[\s\S]*?<\/\1>/gi,'').replace(/<(?:iframe|object|embed|base)\b[^>]*>/gi,'').replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi,'').replace(/javascript:/gi,'');
  // Styles inside the page (at most a few files), so it looks the same later.

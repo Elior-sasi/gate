@@ -4,6 +4,7 @@ import {identity} from '@/lib/identity';
 import {gmailClient,ticketLinks,type Message} from '@/lib/gmail';
 import {db,dbOn} from '@/lib/push';
 import {snapshot,keyOf,shell,why} from '@/lib/keep';
+import {closeBrowser} from '@/lib/render';
 import {ilMoment} from '@/lib/notify';
 import {newId} from '@/lib/share';
 export const dynamic='force-dynamic';export const maxDuration=60;
@@ -20,6 +21,8 @@ export async function POST(req:NextRequest){
   for(const it of items){const key=keyOf(u.id+'|'+it.url);
    let old:Record<string,unknown>|undefined=(await sql`select id,type,name,length(data) as n from gate_kept where user_id=${u.id} and url_key=${key}`)[0];
    // An earlier copy that is only an empty app shell (pres.global before it was drawn from its data) is made again.
+   // A ticket drawn from its data (before the page itself could be kept) is made again too.
+   if(old&&old.type==='image/svg+xml'){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}
    if(old&&old.type==='text/html'){const d=(await sql`select data from gate_kept where id=${old.id}`)[0];if(d&&shell(Buffer.from(String(d.data),'base64').toString('utf8'))){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}}
    if(old){out.push({msg:it.msg,url:it.url,file:{msg:it.msg,id:'k_'+old.id,name:String(old.name),type:String(old.type),size:Math.round(Number(old.n)*0.75)}});continue;}
    try{const m=await gmail('messages/'+encodeURIComponent(it.msg)+'?format=full') as Message;
@@ -29,5 +32,5 @@ export async function POST(req:NextRequest){
     await sql`insert into gate_kept(id,user_id,url_key,msg,type,name,data,expires) values(${id},${u.id},${key},${it.msg},${k.type},${k.name},${k.data},${exp.toISOString()})`;
     out.push({msg:it.msg,url:it.url,file:{msg:it.msg,id:'k_'+id,name:k.name,type:k.type,size:Math.round(k.data.length*0.75)}});
    }catch{out.push({msg:it.msg,url:it.url,failed:true});}}
-  return Response.json({kept:out},{headers:H});
+  await closeBrowser();return Response.json({kept:out},{headers:H});
  }catch(e){const code=e instanceof Error?e.message:'';return Response.json({error:code},{status:code==='UNAUTHORIZED'?401:400,headers:H});}}
