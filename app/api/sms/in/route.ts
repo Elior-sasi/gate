@@ -30,5 +30,5 @@ export async function POST(req:NextRequest){
  try{const key=keyOf(user+'|'+s.url);const old=(await sql`select id,type,name,length(data) as n from gate_kept where user_id=${user} and url_key=${key}`)[0];
   if(old){file={id:'k_'+old.id,name:String(old.name),type:String(old.type),size:Math.round(Number(old.n)*0.75)};if(presApi(s.url))info=(await presTicket(s.url).catch(()=>null))?.info||null;}
   else{const k=await snapshot(s.url,'כרטיס');if(k){info=k.info||null;fresh=true;const id=newId();await sql`insert into gate_kept(id,user_id,url_key,msg,type,name,data,expires) values(${id},${user},${key},${'sms'},${k.type},${k.name},${k.data},${new Date(Date.now()+120*864e5).toISOString()})`;file={id:'k_'+id,name:k.name,type:k.type,size:Math.round(k.data.length*0.75)};}}}catch{}
- await sql`insert into gate_sms(user_id,text,item) values(${user},${text},${JSON.stringify({...s,file,...(info?{info}:{}),...(fresh&&info?{v:4}:{})})})`;
+ await sql`insert into gate_sms(user_id,text,item) values(${user},${text},${JSON.stringify({...s,file,...(info?{info}:{}),...(fresh&&info?{v:5}:{})})})`;
  await closeBrowser();return Response.json({ok:true,ticket:true,kept:!!file});}
