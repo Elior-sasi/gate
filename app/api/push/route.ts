@@ -11,6 +11,12 @@ const body=z.object({subscription:sub.optional(),remove:z.string().max(1000).opt
 const keep=(l:Ticket[])=>l.filter(t=>t&&typeof t.key==='string'&&typeof t.start==='string'&&Array.isArray(t.msgs)).slice(0,300);
 // Status for the settings screen, plus this user's personal calendar and widget links.
 export async function GET(req:NextRequest){if(!dbOn())return Response.json({enabled:false},{headers:H});
+ // The tapped notification's event is kept on the server for 3 minutes; the app asks for it when it comes to the front
+ // (on iPhone neither the worker's message nor navigate() reliably reach a page that was asleep).
+ if(req.nextUrl.searchParams.get('step')==='want'){try{const u=await pushIdentity(req);const {sql,ready}=db();await ready;await sql`create table if not exists gate_want(user_id text primary key,k text not null,at timestamptz not null)`;
+  const k=req.nextUrl.searchParams.get('t');
+  if(k){await sql`insert into gate_want(user_id,k,at) values(${u.id},${k.slice(0,200)},now()) on conflict(user_id) do update set k=excluded.k,at=now()`;return Response.json({ok:true},{headers:H});}
+  const r=(await sql`delete from gate_want where user_id=${u.id} returning k,at`)[0];return Response.json({t:r&&Date.now()-new Date(r.at).getTime()<180e3?r.k:null},{headers:H});}catch{return Response.json({t:null},{headers:H});}}
  try{const u=await pushIdentity(req);const {sql,ready}=db();await ready;const row=(await sql`select subs,checked_at from gate_users where user_id=${u.id}`)[0];
   const base=req.nextUrl.origin;return Response.json({enabled:true,publicKey:vapid().publicKey,devices:(row?.subs as Sub[]|undefined)?.length||0,checkedAt:row?.checked_at||null,
    calendar:base.replace(/^https/,'webcal')+'/api/calendar?t='+token(u.id,'calendar'),widget:base+'/api/widget?t='+token(u.id,'widget'),sms:base+'/api/sms/in?t='+token(u.id,'sms')},{headers:H});

@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {signOut} from 'next-auth/react';
-import {Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,Bus,DoorOpen,LogOut,RotateCcw,Users,Martini,Plus,ImagePlus,ClipboardPaste,Trash2} from 'lucide-react';
+import {ChevronLeft,Ticket as TicketIcon,CalendarDays,History,Settings,RefreshCw,Search,MapPin,Clock,Navigation,Map as MapIcon,CalendarPlus,Mail,Copy,ChevronRight,FileText,QrCode,Wallet,ExternalLink,Music,Drama,Clapperboard,Trophy,PartyPopper,Mic,Presentation,Sparkles,Send,Share2,X,ChartColumn,Pencil,Volume2,Type,Bell,BellOff,Smartphone,CalendarSync,Check,Armchair,EyeOff,Bus,DoorOpen,LogOut,RotateCcw,Users,Martini,Plus,ImagePlus,ClipboardPaste,Trash2} from 'lucide-react';
 import type {Ticket,Kind,TFile} from '@/lib/tickets';
 import {mergeAll,status,cleanSeats,current,withSms} from '@/lib/combine';
 import type {PresInfo} from '@/lib/pres';
@@ -123,7 +123,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  const [online,setOnline]=useState(true);
  useEffect(()=>{setOnline(navigator.onLine);const on=()=>{setOnline(true);if(gmail&&user?.id!=='demo')void scan();};const off=()=>setOnline(false);addEventListener('online',on);addEventListener('offline',off);return()=>{removeEventListener('online',on);removeEventListener('offline',off);};},[gmail,user,scan]);
  // The service worker keeps the app and the ticket files for offline use (public/sw.js); it is registered on every open, not only for notifications.
- useEffect(()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});},[]);
+ useEffect(()=>{if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js?v=2',{updateViaCache:'none'}).catch(()=>{});},[]);
  useEffect(()=>{if(ready&&gmail&&user?.id!=='demo'&&navigator.onLine)scan();},[ready,gmail,scan,user]);
  // Opening screen, like Unbox: the G draws itself, then fades into the app.
  const [splash,setSplash]=useState<'on'|'out'|'off'>('on');
@@ -151,7 +151,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  useEffect(()=>{if(!user||user.id==='demo')return;void (async()=>{const s:Srv=await fetch('/api/push',{cache:'no-store'}).then(r=>r.json()).catch(()=>({enabled:false}));setSrv(s);
   const ios=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=matchMedia('(display-mode: standalone)').matches||(navigator as {standalone?:boolean}).standalone===true;
   if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){setPush(ios&&!standalone?'install':'unsupported');return;}
-  try{const reg=await navigator.serviceWorker.register('/sw.js');if(Notification.permission==='denied'){setPush('denied');return;}const sub=await reg.pushManager.getSubscription();setPush(sub&&Notification.permission==='granted'?'on':'off');}catch{setPush('unsupported');}})();},[user]);
+  try{const reg=await navigator.serviceWorker.register('/sw.js?v=2',{updateViaCache:'none'});if(Notification.permission==='denied'){setPush('denied');return;}const sub=await reg.pushManager.getSubscription();setPush(sub&&Notification.permission==='granted'?'on':'off');}catch{setPush('unsupported');}})();},[user]);
  const sendServer=useCallback(async(extra:Record<string,unknown>={})=>{if(!user)return null;const r=await fetch('/api/push',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tickets:(()=>{const nm=load(NAM(user.id),{} as Record<string,string>);const mc=load(MCX(user.id),[] as string[]);return load(KEY(user.id),{tickets:[] as Ticket[]}).tickets.map(t=>({...t,...(nm[t.key]?{title:nm[t.key]}:{}),...(mc.includes(t.key)?{cancelled:true}:{})}));})(),hidden:load(HID(user.id),[] as string[]),...extra})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'השמירה נכשלה');return d;},[user]);
  // After every scan, the server copy follows the phone.
  const synced=useRef('');useEffect(()=>{if(!srv?.enabled||!store.tickets.length)return;const sig=store.tickets.length+'|'+store.tickets.filter(t=>t.ai).length+'|'+hidden.length+'|'+JSON.stringify(names).length+'|'+(busy?'':store.updated);if(synced.current===sig)return;const id=setTimeout(()=>{synced.current=sig;sendServer().catch(()=>{});},busy?6000:500);return()=>clearTimeout(id);},[srv,busy,store,hidden.length,names,sendServer]);
@@ -161,8 +161,19 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   catch(e){setPush('off');setPushMsg(e instanceof Error?e.message:'לא ניתן להפעיל התראות');}}
  async function disablePush(){setPush('busy');setPushMsg('');try{const reg=await navigator.serviceWorker.ready;const sub=await reg.pushManager.getSubscription();if(sub){await sendServer({remove:sub.endpoint}).catch(()=>{});await sub.unsubscribe();}}finally{setPush('off');}}
  async function testPush(){setPushMsg('');try{await sendServer({test:true});setPushMsg('נשלחה התראת בדיקה');}catch(e){setPushMsg(e instanceof Error?e.message:'השליחה נכשלה');}}
+ const want=useRef<string|null>(null);const [wantTick,setWantTick]=useState(0);
+ useEffect(()=>{try{const k=new URLSearchParams(location.search).get('t');if(k){want.current=k;history.replaceState(null,'','/');setWantTick(x=>x+1);}}catch{}},[]);
+ // A tapped notification while Unstage was already open or asleep: the worker's message, its cache entry, or the server (asked again a little later).
+ useEffect(()=>{const take=(url?:string|null)=>{if(!url)return;try{const k=new URL(url,location.origin).searchParams.get('t');if(k){want.current=k;setWantTick(x=>x+1);}}catch{}};
+  const onMsg=(e:MessageEvent)=>{const d=e.data as {type?:string;url?:string};if(d?.type==='open')take(d.url);};
+  const fromCache=async()=>{try{if(typeof caches==='undefined')return;const c=await caches.open('unstage-open');const r=await c.match('/__open');if(!r)return;await c.delete('/__open');const d=await r.json() as {url?:string;at?:number};if(Date.now()-(d.at||0)<10*60000)take(d.url);}catch{}};
+  const fromServer=async()=>{try{const d=await (await fetch('/api/push?step=want',{cache:'no-store'})).json() as {t?:string|null};if(d?.t){want.current=d.t;setWantTick(x=>x+1);}}catch{}};
+  let timers:number[]=[];const look=()=>{void fromCache();timers.forEach(clearTimeout);timers=[0,1500,4000].map(ms=>window.setTimeout(()=>{void fromServer();},ms));};
+  const onShow=()=>{if(document.visibilityState==='visible'){look();navigator.serviceWorker?.getRegistration().then(r=>r?.update()).catch(()=>{});}};look();
+  navigator.serviceWorker?.addEventListener('message',onMsg);document.addEventListener('visibilitychange',onShow);window.addEventListener('pageshow',onShow);
+  return()=>{timers.forEach(clearTimeout);navigator.serviceWorker?.removeEventListener('message',onMsg);document.removeEventListener('visibilitychange',onShow);window.removeEventListener('pageshow',onShow);};},[]);
  // A notification or the widget opens a ticket directly: /?t=<event>.
- useEffect(()=>{if(!ready)return;const k=new URLSearchParams(location.search).get('t');if(!k)return;history.replaceState(null,'','/');if(store.tickets.some(t=>t.key===k))setOpen(k);},[ready,store.tickets]);
+ useEffect(()=>{const k=want.current;if(!ready||!k)return;if(store.tickets.some(t=>t.key===k)){want.current=null;setOpen(k);}},[ready,store.tickets,wantTick]);
  // "שאל את Unstage": questions about your own events, answered by Gemini from the list on the phone.
  const [askOpen,setAskOpen]=useState(false);const [askDraft,setAskDraft]=useState('');const [chat,setChat]=useState<{role:'user'|'model';text:string}[]>([]);const [asking,setAsking]=useState(false);
  const [canListen,setCanListen]=useState(false);useEffect(()=>{const w=window as unknown as {webkitSpeechRecognition?:unknown;SpeechRecognition?:unknown};setCanListen(!!(w.webkitSpeechRecognition||w.SpeechRecognition));},[]);
@@ -372,19 +383,19 @@ function Gift({t,me,onClose}:{t:Ticket;me:string;onClose:()=>void}){const docs=t
   {msg&&<p className="setNote" role="status" style={{textAlign:'center'}}>{msg}</p>}
  </div></div>;}
 // Tickets by SMS, as Unbox does it: an iPhone Shortcut forwards every message with "כרטיס" to the personal link. A message can also be pasted here.
-function SmsSet({link,last,onCopy,onPasted}:{link:string;last:{at:string;kind:string;shape?:string;raw?:number}|null;onCopy:(t:string)=>void;onPasted:()=>void}){const [text,setText]=useState('');const [msg,setMsg]=useState('');const [busy,setBusy]=useState(false);
+function SmsSet({link,last,onCopy,onPasted,android}:{android?:boolean;link:string;last:{at:string;kind:string;shape?:string;raw?:number}|null;onCopy:(t:string)=>void;onPasted:()=>void}){const [text,setText]=useState('');const [msg,setMsg]=useState('');const [busy,setBusy]=useState(false);
  const paste=async()=>{if(!text.trim())return;setBusy(true);setMsg('');try{const r=await fetch(link,{method:'POST',headers:{'Content-Type':'text/plain'},body:text});const d=await r.json().catch(()=>({}));
    setMsg(!d.ticket?'לא מצאתי בהודעה קישור לכרטיס.':d.kept?'הכרטיס נשמר ✓':'קיבלתי את ההודעה, אבל לא הצלחתי לפתוח את הקישור לכרטיס.');if(d.ticket){setText('');onPasted();}}catch{setMsg('לא הצלחתי לשלוח. נסה שוב.');}finally{setBusy(false);}};
- return <div className="set"><h3><Smartphone size={18}/>כרטיסים מ-SMS</h3>
-  <p className="setNote">יש מקומות ששולחים את הכרטיס ב-SMS ולא במייל, כמו הסינמטק. הכרטיס נשמר ומצטרף לאירוע שלו. מגדירים פעם אחת באפליקציית קיצורי הדרך:</p>
+ return <details className="set setFold"><summary><h3><Smartphone size={18}/>כרטיסים מ-SMS</h3>{last?.kind==='ticket'&&<span className="bstate on">מוגדר ✓</span>}<ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
+  {!android&&<><p className="setNote">יש מקומות ששולחים את הכרטיס ב-SMS ולא במייל, כמו הסינמטק. הכרטיס נשמר ומצטרף לאירוע שלו. מגדירים פעם אחת באפליקציית קיצורי הדרך:</p>
   <ol className="steps2"><li>קיצורים ← אוטומציה ← אוטומציה חדשה ← <b>הודעה</b>.</li><li>"ההודעה מכילה": <b>כרטיס</b>. בחר <b>הרץ מיד</b>.</li><li>פעולה: <b>קבל תוכן של URL</b>. בכתובת הדבק את הקישור האישי, שיטה <b>POST</b>, גוף בקשה <b>טקסט</b> = תוכן ההודעה.</li></ol>
-  <button className="ghost" onClick={()=>onCopy(link)}><Copy size={18}/>העתקת הקישור האישי</button>
+  <button className="ghost" onClick={()=>onCopy(link)}><Copy size={18}/>העתקת הקישור האישי</button></>}
   <p className="setNote" role="status">{last?'הודעה אחרונה הגיעה ב־'+new Date(last.at).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+(last.kind==='ticket'?' וזוהתה ככרטיס ✓':last.kind==='empty'?', אבל בלי טקסט (הקיצור שלח '+(last.raw??0)+' תווים'+(last.shape?', '+last.shape:'')+')':', אבל לא נמצא בה קישור לכרטיס'):'עדיין לא הגיעה אף הודעה מהקיצור.'}</p>
-  <label className="setNote" htmlFor="smsPaste" style={{display:'block',marginTop:10}}>או הדבק כאן הודעה עם כרטיס:</label>
+  <label className="setNote" htmlFor="smsPaste" style={{display:'block',marginTop:10}}>{android?'יש מקומות ששולחים את הכרטיס ב-SMS ולא במייל. הדבק כאן הודעה כזו:':'או הדבק כאן הודעה עם כרטיס:'}</label>
   <textarea id="smsPaste" className="smsBox" rows={3} value={text} onChange={e=>setText(e.target.value)} placeholder="מצורפים הכרטיסים שהזמנת…"/>
   <button className="ghost" disabled={busy||!text.trim()} onClick={paste}><Send size={18}/>{busy?'שומר…':'הוספת הכרטיס'}</button>
   {msg&&<p className="setNote" role="status">{msg}</p>}
-  <p className="setNote">הקישור אישי. אל תשתף אותו.</p></div>;}
+  {!android&&<p className="setNote">הקישור אישי. אל תשתף אותו.</p>}</details>;}
 type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
  return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press} aria-label={t.title+', '+longDate(t)}><div className="c">
@@ -508,9 +519,10 @@ if(code&&code.includes('ListWidget')){await new AF('r',code)(r)}else{const w=new
 type SrvProps={srv:{enabled:boolean;devices?:number;calendar?:string;widget?:string;sms?:string}|null;push:string;pushMsg:string;onPush:()=>void;onTest:()=>void;onCopy:(t:string)=>void};
 function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,onRestore,onRescan,size,onSize,smsLast,onSmsPasted}:{smsLast:{at:string;kind:string;shape?:string;raw?:number}|null;onSmsPasted:()=>void;user:User;hiddenCount:number;onRestore:()=>void;onRescan:()=>void;size:number;onSize:(i:number)=>void}&SrvProps){
  const noDb=srv&&!srv.enabled;
+ // Android (the installed app): iPhone-only setups (Shortcuts, Scriptable, Siri) are not shown.
+ const [android,setAndroid]=useState(false);useEffect(()=>{setAndroid(/Android/i.test(navigator.userAgent));},[]);
  const slideSize=useRowSlide();const speakUrl=srv?.widget?.replace('/api/widget','/api/speak');
  return <><div className="settings">
-  <div className="set"><h3><Type size={18}/>גודל טקסט</h3><div className="seg" role="radiogroup" aria-label="גודל טקסט" {...slideSize(3,onSize)}>{['רגיל','גדול','גדול מאוד'].map((l,i)=><button key={i} role="radio" aria-checked={size===i} className={size===i?'on':''} onClick={()=>onSize(i)}>{l}</button>)}</div></div>
   <div className="set"><h3><Bell size={18}/>התראות</h3>
    <p className="setNote">ערב לפני כל אירוע, שלוש שעות לפני עם הכרטיס מוכן, וכשמגיע כרטיס חדש למייל.</p>
    {noDb?<p className="setNote">השרת עוד לא חובר למסד נתונים.</p>
@@ -520,23 +532,25 @@ function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,on
     :<><button className={push==='on'?'ghost':'primary'} disabled={push==='busy'||push==='checking'||!srv} onClick={onPush}>{push==='on'?<><BellOff size={18}/>כיבוי התראות</>:<><Bell size={18}/>הפעלת התראות</>}</button>
      {push==='on'&&<button className="ghost" onClick={onTest}><Check size={18}/>התראת בדיקה</button>}</>}
    {pushMsg&&<p className="setNote">{pushMsg}</p>}</div>
-  {srv?.calendar&&<div className="set"><h3><CalendarSync size={18}/>יומן שמתעדכן לבד</h3>
+  <div className="set"><h3><Type size={18}/>גודל טקסט</h3><div className="seg" role="radiogroup" aria-label="גודל טקסט" {...slideSize(3,onSize)}>{['רגיל','גדול','גדול מאוד'].map((l,i)=><button key={i} role="radio" aria-checked={size===i} className={size===i?'on':''} onClick={()=>onSize(i)}>{l}</button>)}</div></div>
+  {(srv?.calendar||srv?.sms||srv?.widget)&&<h2 className="setGroup">הגדרות חד־פעמיות</h2>}
+  {srv?.calendar&&<details className="set setFold"><summary><h3><CalendarSync size={18}/>יומן שמתעדכן לבד</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
    <p className="setNote">כל האירועים מופיעים ביומן של הטלפון, עם תזכורת שעתיים לפני. כרטיס חדש נכנס ליומן בעצמו.</p>
-   <a className="primary" href={srv.calendar}><CalendarPlus size={18}/>הוספה ליומן של האייפון</a>
-   <button className="ghost" onClick={()=>onCopy(srv.calendar!.replace(/^webcal/,'https'))}><Copy size={18}/>העתקת הקישור (ל-Google Calendar)</button></div>}
-  {srv?.sms&&<SmsSet link={srv.sms} last={smsLast} onCopy={onCopy} onPasted={onSmsPasted}/>}
-  {srv?.widget&&<div className="set"><h3><Smartphone size={18}/>ווידג'ט למסך הבית ולמסך הנעילה</h3>
+   {!android&&<a className="primary" href={srv.calendar}><CalendarPlus size={18}/>הוספה ליומן של האייפון</a>}
+   <button className="ghost" onClick={()=>onCopy(srv.calendar!.replace(/^webcal/,'https'))}><Copy size={18}/>העתקת הקישור (ל-Google Calendar)</button></details>}
+  {srv?.sms&&<SmsSet android={android} link={srv.sms} last={smsLast} onCopy={onCopy} onPasted={onSmsPasted}/>}
+  {srv?.widget&&!android&&<details className="set setFold"><summary><h3><Smartphone size={18}/>ווידג'ט למסך הבית ולמסך הנעילה</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
    <p className="setNote">מראה את האירוע הבא ומה אחריו. עובד דרך אפליקציית <b>Scriptable</b> (חינם ב-App Store).</p>
    <ol className="steps2"><li>העתק את הסקריפט.</li><li>ב-Scriptable: <b>+</b>, הדבק ושמור בשם <b>Unstage</b>.</li><li>במסך הבית: לחיצה ארוכה ← <b>+</b> ← Scriptable ← גודל בינוני. בהגדרות הווידג'ט בחר את הסקריפט <b>Unstage</b>.</li><li>גם למסך הנעילה: התאמה אישית ← מסך נעילה ← Scriptable, ובחר <b>Unstage</b>.</li></ol>
-   <button className="ghost" onClick={()=>onCopy(widgetScript(srv.widget!))}><Copy size={18}/>העתקת הסקריפט</button></div>}
-  {speakUrl&&<div className="set"><h3><Mic size={18}/>לשאול את Siri</h3>
+   <button className="ghost" onClick={()=>onCopy(widgetScript(srv.widget!))}><Copy size={18}/>העתקת הסקריפט</button></details>}
+  {speakUrl&&!android&&<details className="set setFold"><summary><h3><Mic size={18}/>לשאול את Siri</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
    <p className="setNote">אומרים "היי Siri, מה האירוע הבא שלי" ושומעים מה, מתי ואיפה.</p>
    <ol className="steps2"><li>העתק את הקישור האישי.</li><li>באפליקציית קיצורים: <b>+</b> ← הוסף פעולה <b>קבל תוכן של URL</b> והדבק את הקישור.</li><li>הוסף פעולה <b>דבר טקסט</b>.</li><li>שמור את הקיצור בשם <b>מה האירוע הבא שלי</b>.</li></ol>
    <button className="ghost" onClick={()=>onCopy(speakUrl)}><Copy size={18}/>העתקת הקישור האישי</button>
-   <button className="ghost" onClick={async()=>{try{const t=await (await fetch(speakUrl,{cache:'no-store'})).text();const u=new SpeechSynthesisUtterance(t);u.lang='he-IL';speechSynthesis.cancel();speechSynthesis.speak(u);}catch{}}}><Volume2 size={18}/>השמע עכשיו</button></div>}
+   <button className="ghost" onClick={async()=>{try{const t=await (await fetch(speakUrl,{cache:'no-store'})).text();const u=new SpeechSynthesisUtterance(t);u.lang='he-IL';speechSynthesis.cancel();speechSynthesis.speak(u);}catch{}}}><Volume2 size={18}/>השמע עכשיו</button></details>}
+  <details className="set setFold setAdv"><summary><h3><RefreshCw size={18}/>מתקדם</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary><p className="setNote">Unstage קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
+   {hiddenCount>0&&<button className="ghost" onClick={onRestore}><EyeOff size={18}/>החזרת {hiddenCount} אירועים מוסתרים</button>}</details>
   <div className="set"><h3><Mail size={18}/>חשבון</h3><p className="setNote"><b>{user.name}</b><br/><span dir="ltr">{user.email}</span></p><button className="ghost" onClick={()=>void clearDevice().finally(()=>signOut({redirectTo:'/'}))}><LogOut size={18}/>יציאה</button></div>
-  <div className="set"><h3><RefreshCw size={18}/>סריקה</h3><p className="setNote">Unstage קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
-   {hiddenCount>0&&<button className="ghost" onClick={onRestore}><EyeOff size={18}/>החזרת {hiddenCount} אירועים מוסתרים</button>}</div>
   <p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. רשימת האירועים נשמרת בטלפון, ועותק שלה בשרת בשביל התזכורות, היומן והווידג'ט. קובצי הכרטיס נפתחים ישירות מהמייל שלך. <a href="/privacy">פרטיות</a></p></div></>;}
 
 // Summary tab: how many events, what kind, where, and what they cost.

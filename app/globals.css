@@ -391,3 +391,17 @@ input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webk
 .kindPick{border:0;padding:0;margin:4px 0 0;display:flex;flex-wrap:wrap;gap:8px}.kindPick legend{font-size:calc(15px*var(--fs));color:var(--mut);margin:4px 4px 6px;padding:0}
 .kindPick button{min-height:44px;padding:0 14px;border-radius:22px;background:#141c25;border:1px solid var(--line);color:var(--ink);font:inherit;font-weight:600}
 .kindPick button.on{background:#ffd27a;border-color:#ffd27a;color:#1b1206}
+/* Settings: one-time setups and advanced options fold away */
+.setGroup{font-size:calc(19px*var(--fs,1));margin:22px 4px 8px;color:var(--mut);font-weight:600}
+details.setFold>summary{list-style:none;display:flex;align-items:center;gap:10px;min-height:52px;cursor:pointer}
+details.setFold>summary::-webkit-details-marker{display:none}
+details.setFold>summary h3{margin:0;flex:1;color:var(--ink)}
+details.setFold>summary .bstate{flex:none}
+details.setFold .foldIc{flex:none;color:var(--mut);transition:transform .2s}
+details.setFold[open] .foldIc{transform:rotate(-90deg)}
+details.setFold[open]>summary{margin-bottom:8px}
+.setAdv{margin-top:14px}
+@media (prefers-reduced-motion:reduce){details.setFold .foldIc{transition:none}}
+/* A tall sheet scrolls inside itself; pulling down closes it only from the top. */
+.menu{max-height:calc(100dvh - env(safe-area-inset-top) - 24px);overflow-y:auto;-webkit-overflow-scrolling:touch}
+details.setFold>summary h3{font-size:calc(17px*var(--fs))}
