@@ -8,6 +8,7 @@ const T=(o:object)=>({reservationIdentifier:'209803927955490',reservationIdentif
 test('pres.global links map to their data address',()=>{
  assert.equal(presApi('https://prestickets.com/jer-cin/3c603657-1dcb-4c2d-b007-e37c98a21729/?id=209803927955490'),'https://jer-cin.pres.global/api/edocument/3c603657-1dcb-4c2d-b007-e37c98a21729?id=209803927955490');
  assert.equal(presApi('https://jer-cin.pres.global/edocument/3c603657-1dcb-4c2d-b007-e37c98a21729/?id=209803927955490'),'https://jer-cin.pres.global/api/edocument/3c603657-1dcb-4c2d-b007-e37c98a21729?id=209803927955490');
+ assert.equal(presApi('https://tickets.cinema-city.co.il/edocument/d08b133e-e19e-4285-a390-14a3652c8e6f/?id=864134394615752'),'https://tickets.cinema-city.co.il/api/edocument/d08b133e-e19e-4285-a390-14a3652c8e6f?id=864134394615752');
  assert.equal(presApi('https://example.com/jer-cin/3c603657-1dcb-4c2d-b007-e37c98a21729/?id=209803927955490'),null);});
 test('a pres.global ticket is drawn with a QR per ticket, and its seats replace the order\'s',async()=>{
  const real=globalThis.fetch;globalThis.fetch=(async()=>new Response(JSON.stringify({document:{reservationIsCancelled:false,tickets:[T({seat:'3',displayName:'רגיל',amount:43,barcode:'6781150189034020013-1.433407'}),T({seat:'4',displayName:'נכה',amount:38,barcode:'3959450189006030014-1.433408'})]}}),{headers:{'content-type':'application/json'}})) as typeof fetch;

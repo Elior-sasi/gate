@@ -181,7 +181,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  // so they still show after the seller's link expires and can be sent on to someone. A link that cannot be copied is tried again a day later.
  const keeping=useRef(false);
  useEffect(()=>{if(!user||user.id==='demo'||busy||keeping.current)return;
-  const TRY='gate:kept-try:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
+  const TRY='gate:kept-try2:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
   // Past events too (once each): many sellers' links still open for a while, and then "הצג הכל" works for them as well.
   // Copies kept as a page before pages built by scripts were caught are checked once more (an empty one is made again).
   const V2='gate:kept-v3:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}

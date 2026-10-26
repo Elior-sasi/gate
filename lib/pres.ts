@@ -10,6 +10,8 @@ export function presApi(url:string):string|null{let u:URL;try{u=new URL(url);}ca
  const id=u.searchParams.get('id')||'';if(!/^\d{6,30}$/.test(id))return null;const p=u.pathname.split('/').filter(Boolean);
  if(/(^|\.)prestickets\.com$/i.test(u.hostname)&&SITE.test(p[0]||'')&&DOC.test(p[1]||''))return `https://${p[0]}.pres.global/api/edocument/${p[1]}?id=${id}`;
  const h=u.hostname.match(/^([a-z0-9-]{2,30})\.pres\.global$/i);if(h&&p[0]==='edocument'&&DOC.test(p[1]||''))return `https://${h[1]}.pres.global/api/edocument/${p[1]}?id=${id}`;
+ // Cinemas that run pres.global under their own address (tickets.cinema-city.co.il/edocument/<id>/?id=…): the same data address on that site.
+ if(u.protocol==='https:'&&/\.[a-z]{2,}$/i.test(u.hostname)&&!/^\d+\.\d+\.\d+\.\d+$/.test(u.hostname)&&p[0]==='edocument'&&DOC.test(p[1]||'')&&p.length<=2)return `https://${u.hostname}/api/edocument/${p[1]}?id=${id}`;
  return null;}
 const esc=(s:unknown)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 type T={reservationIdentifier?:string;reservationIdentifierFormatted?:string;featureName?:string;ticketName?:string;displayName?:string;amount?:number;hideTicketPrice?:number;
