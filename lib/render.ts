@@ -20,9 +20,9 @@ export async function renderPage(url:string,timeout=22000):Promise<{data:Buffer;
   await page.setExtraHTTPHeaders({'Accept-Language':'he-IL,he;q=0.9'});
   await page.goto(url,{waitUntil:'networkidle2',timeout});
   // Wait for the ticket itself: text on the page and its pictures (the barcode) loaded.
-  await page.waitForFunction(()=>document.body&&document.body.innerText.trim().length>40&&[...document.images].every(i=>i.complete),{timeout:10000}).catch(()=>{});
+  await page.waitForFunction(()=>document.body&&(document.body.textContent||'').trim().length>40&&[...document.images].every(i=>i.complete),{timeout:10000}).catch(()=>{});
   await new Promise(r=>setTimeout(r,700));
-  const text=await page.evaluate(()=>(document.body?.innerText||'').trim().length);if(text<40){renderWhy='empty '+text+' '+(await page.title()).slice(0,40)+' '+(await page.evaluate(()=>document.documentElement.outerHTML.length));return null;}
+  const text=await page.evaluate(()=>(document.body?.textContent||'').replace(/\s+/g,' ').trim().length);if(text<40){renderWhy='empty '+text+' '+(await page.title()).slice(0,40)+' '+(await page.evaluate(()=>document.documentElement.outerHTML.length));return null;}
   let data=Buffer.from(await page.screenshot({fullPage:true,type:'png'}));let type='image/png';
   if(data.length>1_800_000){data=Buffer.from(await page.screenshot({fullPage:true,type:'jpeg',quality:88}));type='image/jpeg';}
   return data.length>2_400_000?null:{data,type};}
