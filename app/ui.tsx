@@ -26,13 +26,14 @@ const dayStart=(d:Date)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getT
 const daysTo=(t:Ticket)=>Math.round((dayStart(when(t))-dayStart(new Date()))/864e5);
 const upcoming=(t:Ticket)=>daysTo(t)>=0;
 const longDate=(t:Ticket)=>{const d=when(t);return 'יום '+DAYS[d.getDay()]+', '+d.getDate()+' ב'+MONTHS[d.getMonth()]+(d.getFullYear()!==new Date().getFullYear()?' '+d.getFullYear():'');};
-function countdown(t:Ticket):[string,string]{const n=daysTo(t);
+// [the number or word, what follows it, what comes before it]: "נשארו שעתיים", "נשארו 3 שעות", "5 ימים".
+function countdown(t:Ticket):[string,string,string?]{const n=daysTo(t);
  // Hebrew counts one and two with their own words: אתמול, שלשום, מחר, יומיים, שעתיים.
  if(n===-1)return ['אתמול',''];if(n===-2)return ['שלשום',''];
  if(n<0)return [String(-n),'ימים מאז'];
  // Today: hours while an hour or more is left, then minutes; "עכשיו" only once it has begun (and for a few hours after).
- if(n===0){if(timed(t)){const m=(when(t).getTime()-Date.now())/6e4;if(m>=90){const h=Math.round(m/60);return h===2?['שעתיים','נשארו']:[String(h),'שעות נשארו'];}if(m>=60)return ['1','שעה נשארה'];
-  if(m>0){const k=Math.ceil(m);return [String(k),k===1?'דקה נשארה':'דקות נשארו'];}if(m>-240)return ['עכשיו',''];}return ['היום',''];}
+ if(n===0){if(timed(t)){const m=(when(t).getTime()-Date.now())/6e4;if(m>=90){const h=Math.round(m/60);return h===2?['שעתיים','','נשארו']:[String(h),'שעות','נשארו'];}if(m>=60)return ['שעה','','נשארה'];
+  if(m>0){const k=Math.ceil(m);return k===1?['דקה','','נשארה']:[String(k),'דקות','נשארו'];}if(m>-240)return ['עכשיו',''];}return ['היום',''];}
  if(n===1)return ['מחר',timed(t)?'ב-'+time(t):''];
  if(n===2)return ['יומיים',timed(t)?'ב-'+time(t):''];
  return [String(n),'ימים'];}
@@ -358,13 +359,13 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
 function DateTile({t}:{t:Ticket}){const d=when(t);const n=daysTo(t);return <div className={'date'+(n===0?' today':'')} aria-hidden="true"><small>{n===0?'היום':DAY_SHORT[d.getDay()]}</small><b>{d.getDate()}</b><span>{MON_SHORT[d.getMonth()]}{d.getFullYear()!==new Date().getFullYear()?' '+String(d.getFullYear()).slice(2):''}</span></div>;}
 function Hero({t,press,onShow}:{t:Ticket;press:Press;onShow:(fs:TFile[])=>void}){
  // The countdown keeps moving while the app is open (minutes in the last hour).
- const [,tick]=useState(0);useEffect(()=>{const i=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(i);},[]);useEffect(()=>{const pdfs=t.files.filter(f=>/pdf/i.test(f.type+f.name));if(pdfs.length){void pdfLib().catch(()=>{});pdfs.slice(0,4).forEach(f=>void bytes(fileUrl(f)).catch(()=>{}));}},[t]);const [big,unit]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
+ const [,tick]=useState(0);useEffect(()=>{const i=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(i);},[]);useEffect(()=>{const pdfs=t.files.filter(f=>/pdf/i.test(f.type+f.name));if(pdfs.length){void pdfLib().catch(()=>{});pdfs.slice(0,4).forEach(f=>void bytes(fileUrl(f)).catch(()=>{}));}},[t]);const [big,unit,pre]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
  const at=when(t).getTime();const T=Math.max(.06,Math.min(1,(Date.now()-t.mailed)/Math.max(1,at-t.mailed)));
  return <button className="nextCard nc-ring" {...press} aria-label={'האירוע הבא: '+t.title+', '+big+' '+unit}>
   <div className="nc-k nc-top">האירוע הבא · {K.label}</div>
   <div className="nc-row"><svg className="ring" viewBox="0 0 92 92" aria-hidden="true"><defs><linearGradient id="ncg"><stop offset="0" stopColor="#ffd27a"/><stop offset="1" stopColor="#ff9f2e"/></linearGradient></defs>
    <circle cx="46" cy="46" r="40" fill="none" stroke="#ffffff18" strokeWidth="8"/><circle cx="46" cy="46" r="40" fill="none" stroke="url(#ncg)" strokeWidth="8" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C*(1-T)} transform="rotate(-90 46 46)"/>
-   <text x="46" y={unit?50:55} fill="#fff" fontSize={big.length>3?20:big.length>2?26:34} fontWeight="700" textAnchor="middle">{big}</text>{unit&&<text x="46" y="68" fill="#ffd79a" fontSize="11" textAnchor="middle">{unit.split(' ')[0]}</text>}</svg>
+   {pre&&<text x="46" y="29" fill="#ffd79a" fontSize="11" textAnchor="middle">{pre}</text>}<text x="46" y={pre?(unit?55:58):unit?50:55} fill="#fff" fontSize={pre?(big.length>3?18:24):big.length>3?20:big.length>2?26:34} fontWeight="700" textAnchor="middle">{big}</text>{unit&&<text x="46" y="68" fill="#ffd79a" fontSize="11" textAnchor="middle">{unit.split(' ')[0]}</text>}</svg>
    <div className="nc-info"/><DateTile t={t}/></div>
   <div className="nc-nm nc-full">{bidi(t.title)}</div>
   <div className="nc-chips" aria-hidden="true">{timed(t)&&<span>{time(t)}</span>}{place(t)&&<span>{bidi(place(t))}</span>}{t.seats.length>0&&<span>{t.seats.length===1?t.seats[0]:t.seats.length+' מקומות'}</span>}</div>
@@ -423,7 +424,7 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:n===2?<>בעוד <b>יומיים</b></>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
-function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual,onEditManual}:{onRemoveManual:()=>void;onEditManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
+function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual,onEditManual}:{onRemoveManual:()=>void;onEditManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u,pre]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
  return <div className="sheet" role="dialog" aria-label={t.title}>
@@ -432,7 +433,7 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManua
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><div className="actions">{typeof navigator!=='undefined'&&'share' in navigator&&<button className="ib" aria-label="שיתוף" onClick={()=>navigator.share({title:t.title,text:[t.title,longDate(t)+(timed(t)?' בשעה '+time(t):''),place(t)].filter(Boolean).join('\n')}).catch(()=>{})}><Share2/></button>}<button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div></div>
   <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2>{bidi(t.title)}</h2>
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
-   <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd"><b>{n}</b><span>{u}</span></div>}</div>
+   <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd">{pre&&<span>{pre}</span>}<b>{n}</b>{u&&<span>{u}</span>}</div>}</div>
   {!t.cancelled&&t.parts&&status(t.parts).some&&<p className="setNote" style={{color:'var(--bad)',textAlign:'center'}}>חלק מההזמנות בוטלו. הכרטיסים והמחיר כאן הם רק של מה שבתוקף.</p>}
   {t.cancelled&&<div className="box"><p className="setNote" style={{margin:0,color:'var(--bad)'}}>ההזמנה בוטלה, והכרטיסים שלה כבר לא בתוקף.</p></div>}
   {!t.cancelled&&t.files.length>0&&<div className="box"><h3><QrCode/>{nTickets(t)>1?'הכרטיסים':'הכרטיס'}</h3><div className="files">{(()=>{const docs=t.files.filter(f=>!/pkpass/i.test(f.type+f.name));return docs.length>1&&<button className="file all" onClick={()=>setView(docs)}><QrCode size={22}/><span>{'הצג הכל ('+nTickets(t)+' כרטיסים)'}</span></button>;})()}{t.files.map((f,i)=>{const I=fileIcon(f);return /pkpass/i.test(f.type+f.name)?<a key={f.msg+f.id} className="file" href={fileUrl(f)}><I size={22}/><span>{fileLabel(f,i,t.files.length)}</span></a>:(()=>{const x=inFile(t,f);return <button key={f.msg+f.id} className="file" onClick={()=>setView([f])}><I size={22}/><span>{fileLabel(f,i,t.files.length,x.n)}</span><small>{seatShort(x.seats)||(f.name.length<28?f.name:'')}</small></button>;})();})}{t.links.filter(l=>l.label==='הכרטיס מ-SMS').map(l=><a key={l.url} className="file" href={l.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={22}/><span>הכרטיס מ-SMS</span></a>)}</div></div>}
