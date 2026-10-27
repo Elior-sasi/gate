@@ -28,7 +28,9 @@ const upcoming=(t:Ticket)=>daysTo(t)>=0;
 const longDate=(t:Ticket)=>{const d=when(t);return 'יום '+DAYS[d.getDay()]+', '+d.getDate()+' ב'+MONTHS[d.getMonth()]+(d.getFullYear()!==new Date().getFullYear()?' '+d.getFullYear():'');};
 function countdown(t:Ticket):[string,string]{const n=daysTo(t);
  if(n<0)return [String(-n),-n===1?'יום מאז':'ימים מאז'];
- if(n===0){if(timed(t)){const h=Math.round((when(t).getTime()-Date.now())/36e5);if(h>=1)return [String(h),h===1?'שעה נשארה':'שעות נשארו'];if(h>-4)return ['עכשיו',''];}return ['היום',''];}
+ // Today: hours while an hour or more is left, then minutes; "עכשיו" only once it has begun (and for a few hours after).
+ if(n===0){if(timed(t)){const m=(when(t).getTime()-Date.now())/6e4;if(m>=90){const h=Math.round(m/60);return [String(h),'שעות נשארו'];}if(m>=60)return ['1','שעה נשארה'];
+  if(m>0){const k=Math.ceil(m);return [String(k),k===1?'דקה נשארה':'דקות נשארו'];}if(m>-240)return ['עכשיו',''];}return ['היום',''];}
  if(n===1)return ['מחר',timed(t)?'ב-'+time(t):''];
  return [String(n),'ימים'];}
 const place=(t:Ticket)=>[t.venue,t.city].filter(Boolean).join(', ');
@@ -351,7 +353,9 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  </main>;}
 // Hero card like Unbox's: a ring that fills up from the purchase to the event, the date tile, and the event's details.
 function DateTile({t}:{t:Ticket}){const d=when(t);const n=daysTo(t);return <div className={'date'+(n===0?' today':'')} aria-hidden="true"><small>{n===0?'היום':DAY_SHORT[d.getDay()]}</small><b>{d.getDate()}</b><span>{MON_SHORT[d.getMonth()]}{d.getFullYear()!==new Date().getFullYear()?' '+String(d.getFullYear()).slice(2):''}</span></div>;}
-function Hero({t,press,onShow}:{t:Ticket;press:Press;onShow:(fs:TFile[])=>void}){useEffect(()=>{const pdfs=t.files.filter(f=>/pdf/i.test(f.type+f.name));if(pdfs.length){void pdfLib().catch(()=>{});pdfs.slice(0,4).forEach(f=>void bytes(fileUrl(f)).catch(()=>{}));}},[t]);const [big,unit]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
+function Hero({t,press,onShow}:{t:Ticket;press:Press;onShow:(fs:TFile[])=>void}){
+ // The countdown keeps moving while the app is open (minutes in the last hour).
+ const [,tick]=useState(0);useEffect(()=>{const i=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(i);},[]);useEffect(()=>{const pdfs=t.files.filter(f=>/pdf/i.test(f.type+f.name));if(pdfs.length){void pdfLib().catch(()=>{});pdfs.slice(0,4).forEach(f=>void bytes(fileUrl(f)).catch(()=>{}));}},[t]);const [big,unit]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
  const at=when(t).getTime();const T=Math.max(.06,Math.min(1,(Date.now()-t.mailed)/Math.max(1,at-t.mailed)));
  return <button className="nextCard nc-ring" {...press} aria-label={'האירוע הבא: '+t.title+', '+big+' '+unit}>
   <div className="nc-k nc-top">האירוע הבא · {K.label}</div>
