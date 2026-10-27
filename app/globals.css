@@ -408,3 +408,4 @@ details.setFold>summary h3{font-size:calc(17px*var(--fs))}
 
 /* The bracketed note of a name, on its own line */
 .tnote{display:block;font-size:.72em;font-weight:500;color:var(--mut);margin-top:2px;line-height:1.25}
+.tpre{display:block;font-size:.72em;font-weight:500;color:var(--mut);margin-bottom:2px;line-height:1.25}
