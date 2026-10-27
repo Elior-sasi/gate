@@ -14,7 +14,7 @@ import {matchSms,type SmsTicket} from '@/lib/sms';
 import {applyManual,type ManualItem} from '@/lib/manual';
 type User={id:string;name:string;email:string};
 type Store={tickets:Ticket[];read:string[];updated:string};
-const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},party:{label:'מסיבה',Icon:Martini},other:{label:'אירוע',Icon:TicketIcon}};
+const KIND:Record<Kind,{label:string;Icon:typeof Music}>={concert:{label:'הופעה',Icon:Music},show:{label:'הצגה',Icon:Drama},movie:{label:'סרט',Icon:Clapperboard},lecture:{label:'הרצאה',Icon:Presentation},sport:{label:'ספורט',Icon:Trophy},festival:{label:'פסטיבל',Icon:PartyPopper},standup:{label:'סטנדאפ',Icon:Mic},party:{label:'מסיבה',Icon:Martini},con:{label:'כנס',Icon:Users},other:{label:'אירוע',Icon:TicketIcon}};
 const DAYS=['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];const DAY_SHORT=["א'","ב'","ג'","ד'","ה'","ו'",'שבת'];
 const MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const MON_SHORT=['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
@@ -473,7 +473,7 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManua
  </div>;}
 // "הוספת כרטיס": a ticket that came as a picture or PDF (WhatsApp, PayBox), uploaded or pasted. Gemini fills in the details
 // from the picture when it can; the user checks them, and can add the ticket to an event already in the list.
-const KIND_KEYS:Kind[]=['concert','show','movie','lecture','sport','standup','festival','party','other'];
+const KIND_KEYS:Kind[]=['concert','show','movie','lecture','sport','standup','festival','party','con','other'];
 // Smart crop: a screenshot of a picture (WhatsApp shows it on black) loses the plain margins around the ticket.
 // The margin colour is taken from the corners; rows and columns with almost nothing else in them are cut away.
 function trimBox(img:CanvasImageSource,w:number,h:number){const k=Math.min(1,400/Math.max(w,h));const cw=Math.max(1,Math.round(w*k)),ch=Math.max(1,Math.round(h*k));

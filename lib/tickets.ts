@@ -3,7 +3,7 @@
 import {gemini} from '@/lib/gemini';
 import {mergeAll,cleanSeats} from '@/lib/combine';
 import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
-export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'party'|'other';
+export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'party'|'con'|'other';
 // at: when its mail was sent; order: the order it belongs to; stale: replaced by a newer ticket for the same order (not shown).
 export type TFile={msg:string;id:string;name:string;type:string;size:number;at?:number;order?:string;stale?:boolean};
 // mailed: when this mail was sent; update: the mail announces a change (new time, place, seats or a replacement ticket); restored: the event is back on.
@@ -50,12 +50,13 @@ import {fixKind} from '@/lib/kind';
 export {fixKind};
 export function guessKind(t:string):Kind{
  // Cinematheques also host talks: a lecture is a lecture even when it is at a cinema.
- if(/הרצא|מרצה|lecture|talk\b|מאסטר.?קלאס|masterclass|כיתת אמן|שיחה עם|מפגש עם|רב.?שיח|סדנ|workshop|סמינר|כנס/i.test(t))return 'lecture';
+ if(/הרצא|מרצה|lecture|talk\b|מאסטר.?קלאס|masterclass|כיתת אמן|שיחה עם|מפגש עם|רב.?שיח|סדנ|workshop|סמינר/i.test(t))return 'lecture';
  if(/סרט|הקרנה|קולנוע|cinema|movie|imax|4dx|סינמה|סינמטק|פלאנט|planet|מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית|רוסית|ערבית|צרפתית|יפנית)\)|dubbed|subtitled|\b3D\b/i.test(t))return 'movie';
  if(/סטנד.?אפ|stand.?up|קומי/i.test(t))return 'standup';
  if(/משחק|נגד|vs\.?|מכבי|הפועל|בית"ר|ליגה|יורוליג|כדורגל|כדורסל|match|game/i.test(t))return 'sport';
  if(/פסטיבל|festival/i.test(t))return 'festival';
  if(/מסיב|party|rave|רייב|halloween|הלווין|האלווין|פורים|purim|night club/i.test(t))return 'party';
+ if(/כנס|קומיקון|(?:^|\s)קון(?=\s|!|$)|comic.?con|\bcon\b|convention|expo/i.test(t))return 'con';
  if(/הצגה|תיאטרון|הבימה|הקאמרי|גשר|לסין|מחזה|מחזמר|theat(?:er|re)|musical|אופרה|בלט|opera|ballet/i.test(t))return 'show';
  if(/הופעה|הופעת|קונצרט|concert|live|tour|בארבי|זאפה|פילהרמונית|מופע/i.test(t))return 'concert';
  return 'other';}
@@ -127,7 +128,7 @@ export function ruleTicket(m:Message,text:string):Ticket|null{
 const SCHEMA={type:'OBJECT',properties:{
  isTicket:{type:'BOOLEAN',description:'true for tickets/booking confirmations for an event (concert, show, movie, sport, festival, stand-up, lecture), and also for a mail cancelling or refunding such tickets or saying such an event was cancelled. false for flights, hotels, shop orders, marketing, newsletters.'},
  title:{type:'STRING',description:'Short event name as people say it, in the language used in the mail (Hebrew preferred): the film, show, artist or lecture title - not the cinema or venue name. No words like "אישור הזמנה" or order numbers.'},
- kind:{type:'STRING',enum:['concert','show','movie','lecture','sport','festival','standup','party','other'],description:'lecture = a talk, lecture, panel, workshop or conversation with a speaker - also when held at a cinema or cinematheque. movie = a film screening.'},
+ kind:{type:'STRING',enum:['concert','show','movie','lecture','sport','festival','standup','party','con','other'],description:'lecture = a talk, lecture, panel, workshop or conversation with a speaker - also when held at a cinema or cinematheque. movie = a film screening.'},
  start:{type:'STRING',description:'Event start in local time, YYYY-MM-DDTHH:mm (or YYYY-MM-DD if no time). Not the purchase or cancellation date. Empty if the mail does not say.'},
  doors:{type:'STRING',description:'Doors/gates opening time HH:mm, if stated'},
  venue:{type:'STRING',description:'Venue or hall name'},address:{type:'STRING',description:'Street address of the venue, if stated'},city:{type:'STRING'},
@@ -149,7 +150,7 @@ export async function aiTicket(m:Message,text:string):Promise<AiResult>{
  // A cancellation may leave out the date: it is kept only to be joined to the event it cancels (by order number or name).
  if(!j.isTicket||(!dated&&!cx&&!sig.restored))return {ok:true,ticket:null};
  const s=(v:unknown)=>typeof v==='string'&&v.trim()?v.trim().slice(0,120):undefined;const links=ticketLinks(m);
- return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:fixKind((['concert','show','movie','lecture','sport','festival','standup','party','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,sellerOf(m),s(j.title)||subject),
+ return {ok:true,ticket:{key:'',msgs:[m.id],thread:m.threadId,title:s(j.title)||cleanTitle(subject),kind:fixKind((['concert','show','movie','lecture','sport','festival','standup','party','con','other'].includes(j.kind)?j.kind:kindOf(subject,text)) as Kind,sellerOf(m),s(j.title)||subject),
   start:dated?String(j.start).slice(0,16):'',doors:s(j.doors),venue:s(j.venue),address:s(j.address),city:s(j.city),seats:Array.isArray(j.seats)?j.seats.map(String).slice(0,12):[],count:Number(j.count)||undefined,
   order:j.eventCancelled&&!j.order?undefined:s(j.order),provider:s(j.provider),price:s(j.price),files:cx?[]:ticketFiles(m).map(f=>({...f,msg:m.id})),links:links.filter(l=>!/ביטול|cancel|manage|ניהול/i.test(l.label)),mailed,ai:true,cancelled:cx,seller:sellerOf(m)||undefined,...(sig.update?{update:true}:{}),...(sig.restored?{restored:true}:{}),
   cancel:cx?undefined:(()=>{const c=cancelInfo(text,links);const p=typeof j.cancelPolicy==='string'&&j.cancelPolicy.trim()?j.cancelPolicy.trim().slice(0,300):'';return p||c?{...c,text:c?.text||p}:undefined;})()}};}

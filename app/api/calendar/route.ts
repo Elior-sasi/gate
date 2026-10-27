@@ -8,7 +8,7 @@ export const dynamic='force-dynamic';
 const esc=(s:string)=>s.replace(/\\/g,'\\\\').replace(/;/g,'\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n').slice(0,600);
 const fold=(l:string)=>{const out:string[]=[];let cur='';for(const ch of l){if(new TextEncoder().encode(cur+ch).length>73){out.push(cur);cur=' '+ch;}else cur+=ch;}out.push(cur);return out.join('\r\n');};
 const TZ=['BEGIN:VTIMEZONE','TZID:Asia/Jerusalem','BEGIN:STANDARD','DTSTART:19701025T020000','RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU','TZOFFSETFROM:+0300','TZOFFSETTO:+0200','TZNAME:IST','END:STANDARD','BEGIN:DAYLIGHT','DTSTART:19700327T020000','RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1FR','TZOFFSETFROM:+0200','TZOFFSETTO:+0300','TZNAME:IDT','END:DAYLIGHT','END:VTIMEZONE'];
-const ICON:Record<string,string>={concert:'🎵',show:'🎭',movie:'🎬',lecture:'🎤',sport:'🏟️',festival:'🎉',standup:'😂',party:'🪩',other:'🎟️'};
+const ICON:Record<string,string>={concert:'🎵',show:'🎭',movie:'🎬',lecture:'🎤',sport:'🏟️',festival:'🎉',standup:'😂',party:'🪩',con:'🎪',other:'🎟️'};
 export async function GET(req:NextRequest){
  if(!dbOn())return new Response('',{status:503});const user=tokenUser(req.nextUrl.searchParams.get('t')||'','calendar');if(!user)return new Response('',{status:401});
  const {sql,ready}=db();await ready;const row=(await sql`select tickets,hidden from gate_users where user_id=${user}`)[0];
