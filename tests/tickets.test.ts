@@ -70,3 +70,6 @@ test('a table header "Row and Seat" is not a seat',()=>{assert.deepEqual(seatsIn
  assert.deepEqual(seatsIn('Row F Seat 4 | שורה 12א כיסא 3'),['שורה F, כיסא 4','שורה 12א, כיסא 3']);});
 test('a cartoon at the cinema is a film, not a match',async()=>{const {fixKind}=await import('@/lib/tickets');
  assert.equal(guessKind('לוני טונס מציגים: קיוטי נגד אקמי-מדובב (עברית)'),'movie');assert.equal(fixKind('sport','cinema-city.co.il','קיוטי נגד אקמי'),'movie');assert.equal(fixKind('sport','cinema-city.co.il','מכבי תל אביב נגד ריאל מדריד - שידור חי'),'sport');assert.equal(fixKind('concert','cinema-city.co.il','קולדפליי בקולנוע'),'concert');assert.equal(fixKind('lecture','jer-cin.co.il'),'lecture');assert.equal(fixKind('sport','leaan.co.il'),'sport');});
+test('Smarticket: the show from the subject, not the venue',async()=>{const {cleanTitle}=await import('@/lib/tickets');
+ assert.equal(cleanTitle('אישור רכישה - סינמטק שדרות (מס״ד: 656821 הזמנה: כלבים באופרה - מדובב)'),'כלבים באופרה - מדובב');
+ assert.equal(cleanTitle('אישור רכישה - סינמטק שדרות(מס״ד: 651266 הזמנה: מיינקראפט: הסרט (מדובב) | A Minecraft Movie)'),'מיינקראפט: הסרט (מדובב) | A Minecraft Movie');});

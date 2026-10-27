@@ -42,7 +42,9 @@ export function seatsIn(text:string){const out:string[]=[];const S='[\\s:\\-|,]*
   const s=(x[1]?'אזור '+x[1]+', ':'')+'שורה '+x[2]+', כיסא '+x[3];if(!out.includes(s))out.push(s);}
  return out.slice(0,12);}
 const CLEAN=/^(?:fwd?|re|הועבר)\s*:\s*|^(?:אישור (?:ה)?(?:הזמנה|רכישה)|הזמנתך|ההזמנה שלך|הכרטיסים שלך|כרטיסים|כרטיס|your tickets?|tickets? for|booking confirmation|order confirmation)\s*(?:ל|for|-|:|–)?\s*/gi;
-export function cleanTitle(s:string){let t=s.replace(/\s*\((?:GO-OUT|Eventer|Tixwise|Smarticket|Eventim)\)\s*$/i,'').replace(/\s*\|\s*/g,' | ').replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
+// Smarticket puts the show in the subject's brackets: "אישור רכישה - סינמטק שדרות (מס״ד: 656821 הזמנה: כלבים באופרה - מדובב)".
+export const subjectShow=(s:string)=>s.match(/\(\s*מס[״"']?ד:?\s*\d+\s+הזמנה:\s*(.+?)\)\s*$/)?.[1]?.trim()||'';
+export function cleanTitle(s:string){const show=subjectShow(s);if(show)return show;let t=s.replace(/\s*\((?:GO-OUT|Eventer|Tixwise|Smarticket|Eventim)\)\s*$/i,'').replace(/\s*\|\s*/g,' | ').replace(/\s*[-|–]\s*(?:אישור (?:ה)?(?:הזמנה|רכישה)|order confirmation|booking confirmation)\s*$/i,'').replace(/\s*\((?:מס[״"']?ד|הזמנה)[^)]*\)?\s*$/,'');for(let i=0;i<3;i++)t=t.replace(CLEAN,'');return t.replace(/\s*[-|–]\s*(?:מס['׳]?\s*)?(?:הזמנה|order)\s*#?\s*\w+$/i,'').replace(/^["'״]|["'״]$/g,'').trim()||s.trim();}
 export function kindOf(subject:string,text:string):Kind{const k=guessKind(subject);if(k!=='other')return k;const b=guessKind(text.slice(0,1500));return b==='lecture'?'other':b;}
 import {fixKind} from '@/lib/kind';
 export {fixKind};
@@ -165,6 +167,8 @@ export async function readTicket(m:Message,last=false):Promise<Read>{
   if(!t&&(rule?.cancelled||rule?.restored)&&rule.order)t=rule;
   if(t&&rule?.order&&(!t.order||t.cancelled))t={...t,order:rule.order};
   // Gemini sometimes gives only the hall ("אולם 15"); the rules know the branch ("פלאנט איילון - אולם 15").
+  // The show named in a Smarticket subject is the name, not the venue Gemini sometimes takes for it.
+  const show=subjectShow(header(m,'subject'));if(t&&show&&!t.title.includes(show.split(/\s*[|(-]/)[0].trim()))t={...t,title:show};
   if(t&&rule?.venue&&(!t.venue||/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(t.venue.trim())))t={...t,venue:rule.venue};
   return {ticket:t?withKey(t):null,retry:false};}
  // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).
