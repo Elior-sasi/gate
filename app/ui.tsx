@@ -58,13 +58,13 @@ function fullVenue(t:Ticket){const v=(t.venue||'').replace(/^\s*(?:אולם|hall
  if(!/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(v))return t.venue;const p=(t.provider||'').replace(/^(?:Planet Cinema)$/i,'פלאנט').trim();return p&&!/^[\w.+-]+@/.test(p)?p+' - '+v:v;}
 const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':barcode(f)?'ברקוד'+(n>1?' '+(i+1):''):k>1?k+' כרטיסים':'כרטיס'+(n>1&&k<1?' '+(i+1):'');
 // Latin runs (with their dashes, commas and colons) are kept together left-to-right inside Hebrew text: "CHAINSAW MAN – THE MOVIE" stays in one piece.
-// Long event names in parts, each on its own line: what presents it before a colon ("לוני טונס מציגים:") small above the name,
-// a note in brackets at the end, after a bar, or after an exclamation ("(סרט טרום בכורה)", "| אנימיקס 2026", "!! POP/ANIME/FUNK") small under it.
-function Title({s}:{s:string}){let main=s.trim(),pre='',note='';
- const c=main.match(/^([^:]{2,40}?):\s+(.{2,})$/);if(c&&!/\d$/.test(c[1])){pre=c[1];main=c[2];}
- const p=main.match(/^(.+?)\s*\(([^()]{2,60})\)\s*$/);if(p){main=p[1];note=p[2];}
- else{const v=main.match(/^(.+?)\s+\|\s+(.{2,60})$/)||main.match(/^(.{4,}?[!?]+)\s+(.{3,80})$/);if(v){main=v[1];note=v[2];}}
- return <>{pre&&<span className="tpre">{bidi(pre)}</span>}{bidi(main)}{note&&<span className="tnote">{bidi(note)}</span>}</>;}
+// Long event names in parts: the name itself, and under it, small, a note - in brackets at the end, after a bar or an exclamation
+// ("(סרט טרום בכורה)", "| אנימיקס 2026", "!! POP/ANIME/FUNK"), or the version of a film ("-מדובב", "מתורגם", "3D").
+function Title({s}:{s:string}){let main=s.trim(),note='';
+ const ver=main.match(/^(.+?)\s*[-–]?\s*((?:מדובב|מתורגם|דיבוב|כתוביות|גרסה מדובבת|3D|IMAX|4DX)(?:\s+(?:לעברית|עברית|באנגלית|אנגלית))?)\s*$/i);
+ if(ver&&ver[1].length>=2){main=ver[1].replace(/\s*[-–]\s*$/,'');note=ver[2];}
+ else{const p=main.match(/^(.+?)\s*\(([^()]{2,60})\)\s*$/)||main.match(/^(.+?)\s+\|\s+(.{2,60})$/)||main.match(/^(.{4,}?[!?]+)\s+(.{3,80})$/);if(p){main=p[1];note=p[2];}}
+ return <>{bidi(main)}{note&&<span className="tnote">{bidi(note)}</span>}</>;}
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
 const NAM=(u:string)=>'gate:names:'+u;
 // Events the user marked cancelled by hand (some sellers send no cancellation mail, e.g. a cancel by SMS or at the box office).
