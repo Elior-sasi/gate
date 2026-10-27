@@ -12,7 +12,7 @@ test('evening-before and hours-before reminders, once each',()=>{
  const r1=reminders([t],{},[],eve);assert.equal(r1.length,1);assert.match(r1[0].title,/^מחר: /);
  assert.equal(reminders([t],mark({},r1[0]),[],eve).length,0);
  const soon=Date.parse('2026-11-03T13:00:00Z'); // 15:00 Israel, two hours before
- const r2=reminders([t],mark({},r1[0]),[],soon);assert.equal(r2.length,1);assert.match(r2[0].title,/^בעוד 2 שעות: /);assert.match(r2[0].body,/הכרטיס מוכן/);
+ const r2=reminders([t],mark({},r1[0]),[],soon);assert.equal(r2.length,1);assert.match(r2[0].title,/^בעוד שעתיים: /);assert.match(r2[0].body,/הכרטיס מוכן/);
  assert.equal(reminders([t],{},['k1'],soon).length,0);
  assert.equal(reminders([{...t,cancelled:true}],{},[],soon).length,0);});
 test('widget shows the next event first',()=>{const now=Date.parse('2026-11-02T10:00:00Z');const L=lines([T('2026-11-03T17:00'),T('2026-11-20T20:00',{key:'k2',title:'המלט'})],[],now);
