@@ -405,3 +405,6 @@ details.setFold[open]>summary{margin-bottom:8px}
 /* A tall sheet scrolls inside itself; pulling down closes it only from the top. */
 .menu{max-height:calc(100dvh - env(safe-area-inset-top) - 24px);overflow-y:auto;-webkit-overflow-scrolling:touch}
 details.setFold>summary h3{font-size:calc(17px*var(--fs))}
+
+/* The bracketed note of a name, on its own line */
+.tnote{display:block;font-size:.72em;font-weight:500;color:var(--mut);margin-top:2px;line-height:1.25}

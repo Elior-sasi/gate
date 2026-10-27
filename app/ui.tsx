@@ -58,6 +58,8 @@ function fullVenue(t:Ticket){const v=(t.venue||'').replace(/^\s*(?:אולם|hall
  if(!/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(v))return t.venue;const p=(t.provider||'').replace(/^(?:Planet Cinema)$/i,'פלאנט').trim();return p&&!/^[\w.+-]+@/.test(p)?p+' - '+v:v;}
 const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'הוספה ל-Wallet':barcode(f)?'ברקוד'+(n>1?' '+(i+1):''):k>1?k+' כרטיסים':'כרטיס'+(n>1&&k<1?' '+(i+1):'');
 // Latin runs (with their dashes, commas and colons) are kept together left-to-right inside Hebrew text: "CHAINSAW MAN – THE MOVIE" stays in one piece.
+// A note in brackets at the end of a name ("וונדר דוג (סרט טרום בכורה)") goes on its own smaller line under it.
+function Title({s}:{s:string}){const m=s.match(/^(.+?)\s*\(([^()]{2,60})\)\s*$/);return m?<>{bidi(m[1])}<span className="tnote">{bidi(m[2])}</span></>:<>{bidi(s)}</>;}
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
 const NAM=(u:string)=>'gate:names:'+u;
 // Events the user marked cancelled by hand (some sellers send no cancellation mail, e.g. a cancel by SMS or at the box office).
@@ -367,7 +369,7 @@ function Hero({t,press,onShow}:{t:Ticket;press:Press;onShow:(fs:TFile[])=>void})
    <circle cx="46" cy="46" r="40" fill="none" stroke="#ffffff18" strokeWidth="8"/><circle cx="46" cy="46" r="40" fill="none" stroke="url(#ncg)" strokeWidth="8" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C*(1-T)} transform="rotate(-90 46 46)"/>
    {pre&&<text x="46" y="29" fill="#ffd79a" fontSize="11" textAnchor="middle">{pre}</text>}<text x="46" y={pre?(unit?55:58):unit?50:55} fill="#fff" fontSize={pre?(big.length>3?18:24):big.length>3?20:big.length>2?26:34} fontWeight="700" textAnchor="middle">{big}</text>{unit&&<text x="46" y="68" fill="#ffd79a" fontSize="11" textAnchor="middle">{unit.split(' ')[0]}</text>}</svg>
    <div className="nc-info"/><DateTile t={t}/></div>
-  <div className="nc-nm nc-full">{bidi(t.title)}</div>
+  <div className="nc-nm nc-full"><Title s={t.title}/></div>
   <div className="nc-chips" aria-hidden="true">{timed(t)&&<span>{time(t)}</span>}{place(t)&&<span>{bidi(place(t))}</span>}{t.seats.length>0&&<span>{t.seats.length===1?t.seats[0]:t.seats.length+' מקומות'}</span>}</div>
   {/* "הצג כרטיס" opens the tickets themselves, all of them, straight away (the rest of the card opens the event). */}
   {t.files.length>0&&!t.cancelled&&<div className="nc-go" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();onShow(t.files.filter(f=>!/pkpass/i.test(f.type+f.name)));}} onTouchStart={e=>e.stopPropagation()}><QrCode size={20}/>{showLabel(t)}</div>}
@@ -421,7 +423,7 @@ type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
  return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press} aria-label={t.title+', '+longDate(t)}><div className="c">
   <DateTile t={t}/>
-  <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
+  <div className="info"><div className="nm"><Title s={t.title}/></div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:n===2?<>בעוד <b>יומיים</b></>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
 function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual,onEditManual}:{onRemoveManual:()=>void;onEditManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u,pre]=countdown(t);const w=where(t);
@@ -431,7 +433,7 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManua
   {view&&<Viewer fs={view} onClose={()=>setView(null)}/>}
   {gift&&<Gift t={t} me={me} onClose={()=>setGift(false)}/>}
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><div className="actions">{typeof navigator!=='undefined'&&'share' in navigator&&<button className="ib" aria-label="שיתוף" onClick={()=>navigator.share({title:t.title,text:[t.title,longDate(t)+(timed(t)?' בשעה '+time(t):''),place(t)].filter(Boolean).join('\n')}).catch(()=>{})}><Share2/></button>}<button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div></div>
-  <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2>{bidi(t.title)}</h2>
+  <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2><Title s={t.title}/></h2>
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
    <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd">{pre&&<span>{pre}</span>}<b>{n}</b>{u&&<span>{u}</span>}</div>}</div>
   {!t.cancelled&&t.parts&&status(t.parts).some&&<p className="setNote" style={{color:'var(--bad)',textAlign:'center'}}>חלק מההזמנות בוטלו. הכרטיסים והמחיר כאן הם רק של מה שבתוקף.</p>}
