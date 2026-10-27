@@ -66,8 +66,8 @@ function Title({s}:{s:string}){let main=s.trim(),note='';
  else{const p=main.match(/^(.+?)\s*\(([^()]{2,60})\)\s*$/)||main.match(/^(.+?)\s+\|\s+(.{2,60})$/)||main.match(/^(.{4,}?[!?]+)\s+(.{3,80})$/);if(p){main=p[1];note=p[2];}}
  return <>{bidi(main)}{note&&<span className="tnote">{bidi(note)}</span>}</>;}
 // Events read before a fix are read again once: here, Smarticket mails whose name came out as the venue ("סינמטק שדרות").
-function reread(st:{tickets:Ticket[];read:string[];updated:string},uid:string){const F='gate:fix-show:'+uid;try{if(localStorage.getItem(F))return st;localStorage.setItem(F,'1');}catch{return st;}
- const bad=st.tickets.filter(t=>/smarticket/i.test(t.seller||'')||/^(?:סינמטק|קולנוע|cinema)\s/i.test(t.title)&&(t.title===t.venue||(t.venue||'').startsWith(t.title)));
+function reread(st:{tickets:Ticket[];read:string[];updated:string},uid:string){const F='gate:fix-show2:'+uid;try{if(localStorage.getItem(F))return st;localStorage.setItem(F,'1');}catch{return st;}
+ const bad=st.tickets.filter(t=>/smarticket/i.test(t.seller||'')||t.title===t.provider||/^(?:סינמטק|קולנוע|cinema)\s\S+$/i.test(t.title.trim()));
  if(!bad.length)return st;const msgs=new Set(bad.flatMap(t=>t.msgs));
  const n={...st,tickets:st.tickets.filter(t=>!bad.includes(t)),read:st.read.filter(m=>!msgs.has(m))};try{localStorage.setItem('gate:v12:'+uid,JSON.stringify(n));}catch{}return n;}
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
