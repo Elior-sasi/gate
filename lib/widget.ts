@@ -4,7 +4,7 @@ import {ilMoment} from '@/lib/notify';
 export type Line={t:string;s:'big'|'mid'|'small';c:'white'|'gold'|'light'|'gray';n?:number};
 const ilDay=(t:number)=>new Date(t).toLocaleDateString('en-CA',{timeZone:'Asia/Jerusalem'});
 function when(t:Ticket,now:number){const at=ilMoment(t.start);const d=Math.round((new Date(ilDay(at)).getTime()-new Date(ilDay(now)).getTime())/864e5);const h=t.start.split('T')[1]||'';
- if(d<=0){const hrs=Math.round((at-now)/36e5);return h&&hrs>=1&&hrs<=6?'בעוד '+hrs+(hrs===1?' שעה':' שעות'):'היום'+(h?' '+h:'');}
+ if(d<=0){const hrs=Math.round((at-now)/36e5);return h&&hrs>=1&&hrs<=6?(hrs===1?'בעוד שעה':hrs===2?'בעוד שעתיים':'בעוד '+hrs+' שעות'):'היום'+(h?' '+h:'');}
  if(d===1)return 'מחר'+(h?' '+h:'');const wd=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','שבת'][['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Date(at).toLocaleDateString('en-US',{weekday:'short',timeZone:'Asia/Jerusalem'}))];if(d<7)return 'יום '+wd+(h?' '+h:'');return (wd==='שבת'?'שבת ':'יום '+wd+' ')+new Date(at).toLocaleDateString('he-IL',{day:'numeric',month:'numeric',timeZone:'Asia/Jerusalem'});}
 export function upcoming(all:Ticket[],hidden:string[],now=Date.now()){return all.filter(t=>!t.cancelled&&!hidden.includes(t.key)&&ilMoment(t.start)>now-3*36e5).sort((a,b)=>ilMoment(a.start)-ilMoment(b.start));}
 export function lines(all:Ticket[],hidden:string[],now=Date.now()):Line[]{const list=upcoming(all,hidden,now);const L:Line[]=[];

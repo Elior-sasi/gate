@@ -18,7 +18,7 @@ export function reminders(list:Ticket[],sent:Sent,hidden:string[],now=Date.now()
   if(tomorrow&&h>=18&&h<23&&!done.includes('eve'))out.push({key:t.key,tag:'eve:'+t.key,title:'מחר: '+t.title,body:[time(t)&&'בשעה '+time(t),place(t)].filter(Boolean).join(' · ')||'יש לך אירוע מחר',url});
   const timed=t.start.includes('T');const left=at-now;
   if(timed&&left<=3*HOUR&&left>20*60e3&&!done.includes('soon')){const hrs=Math.max(1,Math.round(left/HOUR));
-   out.push({key:t.key,tag:'soon:'+t.key,title:(hrs===1?'בעוד שעה: ':'בעוד '+hrs+' שעות: ')+t.title,body:[place(t),t.doors&&'דלתות '+t.doors,t.files.length?'הכרטיס מוכן באפליקציה':''].filter(Boolean).join(' · '),url});}
+   out.push({key:t.key,tag:'soon:'+t.key,title:(hrs===1?'בעוד שעה: ':hrs===2?'בעוד שעתיים: ':'בעוד '+hrs+' שעות: ')+t.title,body:[place(t),t.doors&&'דלתות '+t.doors,t.files.length?'הכרטיס מוכן באפליקציה':''].filter(Boolean).join(' · '),url});}
   if(!timed&&ilDay(at)===ilDay(now)&&h>=9&&!done.includes('soon'))out.push({key:t.key,tag:'soon:'+t.key,title:'היום: '+t.title,body:place(t)||'יש לך אירוע היום',url});}
  return out;}
 export const mark=(sent:Sent,n:Note)=>({...sent,[n.key]:[...new Set([...(sent[n.key]||[]),n.tag.split(':')[0]])]});

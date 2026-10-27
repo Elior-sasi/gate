@@ -27,11 +27,14 @@ const daysTo=(t:Ticket)=>Math.round((dayStart(when(t))-dayStart(new Date()))/864
 const upcoming=(t:Ticket)=>daysTo(t)>=0;
 const longDate=(t:Ticket)=>{const d=when(t);return 'יום '+DAYS[d.getDay()]+', '+d.getDate()+' ב'+MONTHS[d.getMonth()]+(d.getFullYear()!==new Date().getFullYear()?' '+d.getFullYear():'');};
 function countdown(t:Ticket):[string,string]{const n=daysTo(t);
- if(n<0)return [String(-n),-n===1?'יום מאז':'ימים מאז'];
+ // Hebrew counts one and two with their own words: אתמול, שלשום, מחר, יומיים, שעתיים.
+ if(n===-1)return ['אתמול',''];if(n===-2)return ['שלשום',''];
+ if(n<0)return [String(-n),'ימים מאז'];
  // Today: hours while an hour or more is left, then minutes; "עכשיו" only once it has begun (and for a few hours after).
- if(n===0){if(timed(t)){const m=(when(t).getTime()-Date.now())/6e4;if(m>=90){const h=Math.round(m/60);return [String(h),'שעות נשארו'];}if(m>=60)return ['1','שעה נשארה'];
+ if(n===0){if(timed(t)){const m=(when(t).getTime()-Date.now())/6e4;if(m>=90){const h=Math.round(m/60);return h===2?['שעתיים','נשארו']:[String(h),'שעות נשארו'];}if(m>=60)return ['1','שעה נשארה'];
   if(m>0){const k=Math.ceil(m);return [String(k),k===1?'דקה נשארה':'דקות נשארו'];}if(m>-240)return ['עכשיו',''];}return ['היום',''];}
  if(n===1)return ['מחר',timed(t)?'ב-'+time(t):''];
+ if(n===2)return ['יומיים',timed(t)?'ב-'+time(t):''];
  return [String(n),'ימים'];}
 const place=(t:Ticket)=>[t.venue,t.city].filter(Boolean).join(', ');
 const where=(t:Ticket)=>navQuery(t);
@@ -419,7 +422,7 @@ function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);
   <DateTile t={t}/>
   <div className="info"><div className="nm">{bidi(t.title)}</div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
-    {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
+    {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:n===2?<>בעוד <b>יומיים</b></>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
 function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual,onEditManual}:{onRemoveManual:()=>void;onEditManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};

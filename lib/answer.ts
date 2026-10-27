@@ -24,7 +24,7 @@ export function localAnswer(q:string,list:Ticket[],now=new Date()):string|null{
  if(/מתי|תאריך|איזה יום|באיזה יום/.test(s))out.push(who+' ב'+date(t)+(hour(t)?' בשעה '+hour(t):'')+'.');
  else if(/שעה|באיזו שעה|מתחיל/.test(s))out.push(hour(t)?who+' מתחיל בשעה '+hour(t)+(t.doors?', פתיחת דלתות '+t.doors:'')+'.':'אין לי שעה ל'+who+'.');
  if(/איפה|מקום האירוע|כתובת|לאן|באיזה מקום|אולם/.test(s)&&!out.some(x=>x.includes(place(t))))out.push(place(t)?who+' ב'+place(t).replace(/^ב/,'')+(t.address?', '+t.address:'')+'.':'אין לי מקום ל'+who+'.');
- if(/כמה ימים|עוד כמה/.test(s)){const d=Math.round((new Date(at(t).getFullYear(),at(t).getMonth(),at(t).getDate()).getTime()-day0)/864e5);out.push(d===0?who+' היום.':d===1?who+' מחר.':'עוד '+d+' ימים ל'+who+'.');}
+ if(/כמה ימים|עוד כמה/.test(s)){const d=Math.round((new Date(at(t).getFullYear(),at(t).getMonth(),at(t).getDate()).getTime()-day0)/864e5);out.push(d===0?who+' היום.':d===1?who+' מחר.':d===2?'עוד יומיים ל'+who+'.':'עוד '+d+' ימים ל'+who+'.');}
  if(/כמה שילמ|מחיר|עלה|עלו/.test(s))out.push(t.price?'על '+who+' שילמת '+t.price+'.':'אין לי מחיר ל'+who+'.');
  if(/דלתות/.test(s)&&!out.some(x=>x.includes('דלתות')))out.push(t.doors?'פתיחת דלתות ב'+t.doors+'.':'אין לי שעת פתיחת דלתות.');
  if(!out.length&&/הבא|הקרוב|מה יש|מה האירוע/.test(s))out.push('האירוע הבא: '+who+', '+date(t)+(hour(t)?' בשעה '+hour(t):'')+(place(t)?', ב'+place(t).replace(/^ב/,''):'')+'.');
