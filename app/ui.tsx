@@ -220,7 +220,9 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   const todo=store.tickets.filter(t=>!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
    .flatMap(t=>t.links.filter(l=>!NOT_TICKET.test(l.label.trim())&&!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&v2.includes(l.url))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
    // A past event's link is tried again every few days (sites often still open it for a while); an upcoming one daily.
-   .filter(x=>Date.now()-(tried[x.url]||0)>(x.past?3:1)*864e5).slice(0,8);
+   .filter(x=>Date.now()-(tried[x.url]||0)>(x.past?3:1)*864e5)
+   // Upcoming events first (soonest first), then past ones from the most recent: a ticket from last week is not stuck behind old ones.
+   .sort((a,b)=>a.past!==b.past?(a.past?1:-1):a.past?b.start.localeCompare(a.start):a.start.localeCompare(b.start)).slice(0,12);
   if(!todo.length)return;keeping.current=true;
   void (async()=>{try{for(let i=0;i<todo.length;i+=2){const part=todo.slice(i,i+2);
     const r=await fetch('/api/keep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:part.map(({msg,url,label,start})=>({msg,url,label,start}))})}).catch(()=>null);
