@@ -63,11 +63,11 @@ const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'
 function Title({s}:{s:string}){let main=s.trim(),note='';
  const ver=main.match(/^(.+?)\s*[-–]?\s*((?:מדובב|מתורגם|דיבוב|כתוביות|גרסה מדובבת|3D|IMAX|4DX)(?:\s+(?:לעברית|עברית|באנגלית|אנגלית))?)\s*$/i);
  if(ver&&ver[1].length>=2){main=ver[1].replace(/\s*[-–]\s*$/,'');note=ver[2];}
- else{const p=main.match(/^(.+?)\s*\(([^()]{2,60})\)\s*$/)||main.match(/^(.+?)\s+\|\s+(.{2,60})$/)||main.match(/^(.{4,}?[!?]+)\s+(.{3,80})$/);if(p){main=p[1];note=p[2];}}
+ else{const p=main.match(/^(.+?)\s*\(([^()]{2,60})\)\s*$/)||main.match(/^(.{2,}?)\s*\|\s*(.{2,60})$/)||main.match(/^(.{4,}?[!?]+)\s+(.{3,80})$/);if(p){main=p[1];note=p[2];}}
  return <>{bidi(main)}{note&&<span className="tnote">{bidi(note)}</span>}</>;}
 // Events read before a fix are read again once: here, Smarticket mails whose name came out as the venue ("סינמטק שדרות").
-function reread(st:{tickets:Ticket[];read:string[];updated:string},uid:string){const F='gate:fix-show2:'+uid;try{if(localStorage.getItem(F))return st;localStorage.setItem(F,'1');}catch{return st;}
- const bad=st.tickets.filter(t=>/smarticket/i.test(t.seller||'')||t.title===t.provider||/^(?:סינמטק|קולנוע|cinema)\s\S+$/i.test(t.title.trim()));
+function reread(st:{tickets:Ticket[];read:string[];updated:string},uid:string){const F='gate:fix-show3:'+uid;try{if(localStorage.getItem(F))return st;localStorage.setItem(F,'1');}catch{return st;}
+ const bad=st.tickets.filter(t=>/smarticket/i.test(t.seller||'')||t.title===t.provider||/^(?:cinema-city|lev|cinema|jer-cin)\.co/i.test(t.seller||'')&&Date.now()-t.mailed<60*864e5||/^(?:סינמטק|קולנוע|cinema)\s\S+$/i.test(t.title.trim()));
  if(!bad.length)return st;const msgs=new Set(bad.flatMap(t=>t.msgs));
  const n={...st,tickets:st.tickets.filter(t=>!bad.includes(t)),read:st.read.filter(m=>!msgs.has(m))};try{localStorage.setItem('gate:v12:'+uid,JSON.stringify(n));}catch{}return n;}
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
@@ -135,7 +135,12 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
  const scan=useCallback(async(fresh=false)=>{if(!user||running.current)return;running.current=true;setBusy(true);setErr('');setProg({pct:3,label:'מתחבר ל־Gmail…'});
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
    const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json().catch(()=>({error:'הסריקה לא הושלמה. נסה שוב.'}));if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
-   const seen=new Set(base.read);const todo=(j.ids as string[]).filter(id=>!seen.has(id));
+   // A seller's mail from the last weeks that was read but gave no event (the reading failed then) is read again, at most every 3 days.
+   const RR='gate:reread:'+user.id;let rr:Record<string,number>={};try{rr=JSON.parse(localStorage.getItem(RR)||'{}');}catch{}
+   const inEvents=new Set(base.tickets.flatMap(t=>[...t.msgs,...t.files.map(f=>f.msg)]));
+   const again=((j.sellers||[]) as string[]).filter(id=>base.read.includes(id)&&!inEvents.has(id)&&Date.now()-(rr[id]||0)>3*864e5).slice(0,24);
+   for(const id of again)rr[id]=Date.now();try{localStorage.setItem(RR,JSON.stringify(rr));}catch{}
+   const seen=new Set(base.read.filter(id=>!again.includes(id)));const todo=(j.ids as string[]).filter(id=>!seen.has(id));for(const id of again)if(!todo.includes(id))todo.push(id);
    // As in Unbox: "נקראו 12 מתוך 40 מיילים חדשים", then "משלים 5 מיילים שלא נקראו…".
    const step=(done:number)=>setProg({pct:todo.length?Math.min(90,Math.round(5+85*done/todo.length)):90,label:todo.length?'נקראו '+done+' מתוך '+todo.length+' מיילים חדשים':'אין מיילים חדשים'});step(0);
    const chunk=(l:string[])=>{const o:string[][]=[];for(let i=0;i<l.length;i+=4)o.push(l.slice(i,i+4));return o;};const batches=chunk(todo);let done=0;const retryIds:string[]=[];let second=false;
@@ -452,7 +457,7 @@ type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
  return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press}><div className="c">
   <DateTile t={t}/>
-  <div className="info"><div className="nm"><Title s={t.title}/><span className="sr">, {longDate(t)}</span></div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
+  <div className="info"><div className="nm"><Title s={t.title}/><span className="sr">, {longDate(t)}</span></div>{place(t)&&<div className="meta"><span dir="auto">{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:n===2?<>בעוד <b>יומיים</b></>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
 function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual,onEditManual}:{onRemoveManual:()=>void;onEditManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u,pre]=countdown(t);const w=where(t);

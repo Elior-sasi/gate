@@ -2,6 +2,8 @@
 // Israeli ticket sellers, cinemas and venues by sender, plus ticket words in the subject, so confirmations are not missed.
 const SENDERS=['leaan.co.il','eventim.co.il','tixwise.co.il','zappa-club.co.il','barby.co.il','eventer.co.il','smarticket.co.il','tickchak.co.il','go-out.co','bimot.co.il','hatarbut.co.il','kupat.co.il','habima.co.il','cameri.co.il','gesher-theatre.co.il','beitlessin.org.il','israel-opera.co.il','ipo.co.il','tmu-na.org.il','hasimta.com','cinema-city.co.il','yesplanet.co.il','planetcinema.co.il','lev.co.il','hotcinema.co.il','rav-hen.co.il','globusmax.co.il','ticketmaster.com','ticketmaster.co.uk','eventbrite.com','dice.fm','seetickets.com','livenation.com','axs.com','stubhub.com','viagogo.com','tickets.co.il','mytickets.co.il','tix.co.il','ticketsi.co.il','menoramivtachim-arena.co.il','maccabi.co.il','hapoel.co.il'];
 const SUBJECTS=['כרטיס','כרטיסים','כרטיסייה','"הכרטיסים שלך"','"הזמנת כרטיסים"','"אישור הזמנה"','מופע','הופעה','הצגה','קונצרט','פסטיבל','הקרנה','ticket','tickets','"your order"','"booking confirmation"','e-ticket','eticket','ביטול','בוטל','בוטלה','"החזר כספי"','cancelled','refund'];
+// Mail from ticket sellers only: a purchase among these that gave no event is read again (a reading that failed once).
+export const SELLER_QUERY='-in:spam -in:trash -category:promotions {'+SENDERS.map(s=>'from:'+s).join(' ')+'}';
 export const QUERY='-in:spam -in:trash -category:promotions {'+[...SENDERS.map(s=>'from:'+s),...SUBJECTS.map(s=>'subject:'+s),'"מקום ישיבה"','"שורה"','"פתיחת דלתות"','"doors open"','"row"'].join(' ')+'}';
 export class GmailError extends Error{}
 export type Gmail=(path:string)=>Promise<any>;

@@ -170,6 +170,8 @@ export async function readTicket(m:Message,last=false):Promise<Read>{
   // Gemini sometimes gives only the hall ("אולם 15"); the rules know the branch ("פלאנט איילון - אולם 15").
   // The show named in a Smarticket subject is the name, not the venue Gemini sometimes takes for it.
   const show=subjectShow(header(m,'subject'));if(t&&show&&!t.title.includes(show.split(/\s*[|(-]/)[0].trim()))t={...t,title:show};
+  // Gemini sometimes drops the first part of a name ("קופה ראשית: הסרט" → "הסרט"): the rules' fuller name from the same line wins.
+  if(t&&rule?.title&&t.title&&rule.title!==t.title&&rule.title.endsWith(t.title)&&rule.title.length<=t.title.length+40&&!/אישור|הזמנה|קולנוע|סינמה|סינמטק/.test(rule.title))t={...t,title:rule.title};
   if(t&&rule?.venue&&(!t.venue||/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(t.venue.trim())))t={...t,venue:rule.venue};
   return {ticket:t?withKey(t):null,retry:false};}
  // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).

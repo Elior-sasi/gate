@@ -1,7 +1,7 @@
 import {NextRequest} from 'next/server';
 import {z} from 'zod';
 import {identity} from '@/lib/identity';
-import {QUERY,GmailError,gmailClient,type Message} from '@/lib/gmail';
+import {QUERY,SELLER_QUERY,GmailError,gmailClient,type Message} from '@/lib/gmail';
 import {readTicket,mergeTickets,type Ticket} from '@/lib/tickets';
 import {fail} from '@/lib/errors';
 export const dynamic='force-dynamic';
@@ -13,7 +13,8 @@ export async function GET(req:NextRequest){try{
  const ids:string[]=[];let token='';
  for(let page=0;page<6;page++){const p=new URLSearchParams({maxResults:'500',q:'newer_than:730d '+QUERY,fields:'messages/id,nextPageToken'});if(token)p.set('pageToken',token);
   const list=await gmail('messages?'+p);for(const m of list.messages||[])ids.push(m.id);token=list.nextPageToken||'';if(!token)break;}
- return Response.json({ids,updated:new Date().toISOString()},{headers:H});
+ const sellers:string[]=[];try{const p=new URLSearchParams({maxResults:'200',q:'newer_than:45d '+SELLER_QUERY,fields:'messages/id'});for(const m of (await gmail('messages?'+p)).messages||[])sellers.push(m.id);}catch{}
+ return Response.json({ids,sellers,updated:new Date().toISOString()},{headers:H});
 }catch(e){return fail(e);}}
 const body=z.object({ids:z.array(z.string().regex(/^[a-zA-Z0-9]{6,40}$/)).min(1).max(12),last:z.boolean().optional()});
 // Step 2: read a few messages in full and turn ticket mail into events. "retry" lists mail to read again later (Gemini was busy).
