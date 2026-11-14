@@ -17,7 +17,10 @@ async function browser(){if(!open)open=(async()=>{const puppeteer=(await import(
  return open;}
 export async function closeBrowser(){const b=open;open=null;if(b)await (await b).close().catch(()=>{});}
 export let renderWhy='';
-export async function renderPage(url:string,timeout=22000):Promise<{data:Buffer;type:string}|null>{renderWhy='';let page;
+// A crashed browser (closed target, detached frame) is started again once and the page opened again.
+export async function renderPage(url:string,timeout=22000):Promise<{data:Buffer;type:string}|null>{const r=await renderOnce(url,timeout);
+ if(r||!/closed|detached|crash|Target|Session|Protocol error/i.test(renderWhy))return r;await closeBrowser();return renderOnce(url,timeout);}
+async function renderOnce(url:string,timeout:number):Promise<{data:Buffer;type:string}|null>{renderWhy='';let page;
  try{const b=await browser();page=await b.newPage();await page.setUserAgent(UA);await page.setViewport({width:430,height:860,deviceScaleFactor:2,isMobile:true,hasTouch:true});
   await page.setExtraHTTPHeaders({'Accept-Language':'he-IL,he;q=0.9'});
   await page.goto(url,{waitUntil:'networkidle2',timeout});

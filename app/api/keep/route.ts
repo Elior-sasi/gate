@@ -17,7 +17,9 @@ export async function POST(req:NextRequest){
  if(!dbOn())return Response.json({error:'no db'},{status:503,headers:H});
  try{const u=await identity(req);const {items}=body.parse(await req.json());const gmail=gmailClient(u.accessToken);const {sql,ready}=db();await ready;
   await sql`delete from gate_kept where expires<now()`;
-  const out:{msg:string;url:string;file?:{msg:string;id:string;name:string;type:string;size:number};failed?:boolean;drop?:boolean}[]=[];
+  const out:{msg:string;url:string;file?:{msg:string;id:string;name:string;type:string;size:number};failed?:boolean;drop?:boolean;later?:boolean}[]=[];
+  // A page takes the server's browser several seconds: no new one is started late in the call (the app asks again next time).
+  const t0=Date.now();
   for(const it of items){const key=keyOf(u.id+'|'+it.url);
    let old:Record<string,unknown>|undefined=(await sql`select id,type,name,length(data) as n from gate_kept where user_id=${u.id} and url_key=${key}`)[0];
    // An earlier copy that is only an empty app shell (pres.global before it was drawn from its data) is made again.
@@ -27,6 +29,7 @@ export async function POST(req:NextRequest){
    if(old&&old.type==='image/svg+xml'){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}
    if(old&&old.type==='text/html'){const d=(await sql`select data from gate_kept where id=${old.id}`)[0];if(d&&shell(Buffer.from(String(d.data),'base64').toString('utf8'))){await sql`delete from gate_kept where id=${old.id}`;old=undefined;}}
    if(old){out.push({msg:it.msg,url:it.url,file:{msg:it.msg,id:'k_'+old.id,name:String(old.name),type:String(old.type),size:Math.round(Number(old.n)*0.75)}});continue;}
+   if(Date.now()-t0>28000){out.push({msg:it.msg,url:it.url,later:true});continue;}
    try{const m=await gmail('messages/'+encodeURIComponent(it.msg)+'?format=full') as Message;
     if(!ticketLinks(m).some(l=>l.url===it.url)){out.push({msg:it.msg,url:it.url,failed:true});continue;}
     const k=await snapshot(it.url,it.label.replace(/[^\w֐-׿ .()-]/g,'').slice(0,40)||'כרטיס');if(!k){out.push({msg:it.msg,url:it.url,failed:true,drop:true});if(why)await sql`insert into gate_meta(k,v) values(${'keepdbg:'+why.slice(0,180)},now()) on conflict(k) do update set v=now()`;continue;}

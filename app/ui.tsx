@@ -74,6 +74,8 @@ const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A
 const NAM=(u:string)=>'gate:names:'+u;
 // Events the user marked cancelled by hand (some sellers send no cancellation mail, e.g. a cancel by SMS or at the box office).
 const MCX=(u:string)=>'gate:mycx:'+u;
+// Links in a ticket mail that are not the ticket (cancellation policy, managing the order): never kept as a ticket copy.
+const NOT_TICKET=/^(?:מדיניות|ביטול|תנאי|ניהול|cancel|policy|terms|manage|refund|החזר)/i;
 const KEY=(u:string)=>'gate:v12:'+u;const HID=(u:string)=>'gate:hidden:'+u;
 const load=<T,>(k:string,d:T):T=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}};
 const save=(k:string,v:unknown)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}};
@@ -201,15 +203,16 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
  // so they still show after the seller's link expires and can be sent on to someone. A link that cannot be copied is tried again a day later.
  const keeping=useRef(false);
  useEffect(()=>{if(!user||user.id==='demo'||busy||keeping.current)return;
-  const TRY='gate:kept-try5:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
+  const TRY='gate:kept-try6:'+user.id;let tried:Record<string,number>={};try{tried=JSON.parse(localStorage.getItem(TRY)||'{}');}catch{}
   // Past events too (once each): many sellers' links still open for a while, and then "הצג הכל" works for them as well.
   // Copies kept as a page before pages built by scripts were caught are checked once more (an empty one is made again).
   const V2='gate:kept-v9:'+user.id;let v2:string[]=[];try{v2=JSON.parse(localStorage.getItem(V2)||'[]');}catch{}
   const todo=store.tickets.filter(t=>!t.cancelled&&t.links.length>0&&!t.files.some(f=>!f.id.startsWith('k_')))
-   .flatMap(t=>t.links.filter(l=>!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&v2.includes(l.url))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
-   .filter(x=>x.past?!tried[x.url]:Date.now()-(tried[x.url]||0)>864e5).slice(0,8);
+   .flatMap(t=>t.links.filter(l=>!NOT_TICKET.test(l.label.trim())&&!t.files.some(f=>f.id.startsWith('k_')&&f.name.startsWith(l.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40))&&v2.includes(l.url))).slice(0,2).map(l=>({msg:t.msgs[0],url:l.url,label:l.label,start:t.start,key:t.key,past:!upcoming(t)})))
+   // A past event's link is tried again every few days (sites often still open it for a while); an upcoming one daily.
+   .filter(x=>Date.now()-(tried[x.url]||0)>(x.past?3:1)*864e5).slice(0,8);
   if(!todo.length)return;keeping.current=true;
-  void (async()=>{try{for(let i=0;i<todo.length;i+=4){const part=todo.slice(i,i+4);
+  void (async()=>{try{for(let i=0;i<todo.length;i+=2){const part=todo.slice(i,i+2);
     const r=await fetch('/api/keep',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:part.map(({msg,url,label,start})=>({msg,url,label,start}))})}).catch(()=>null);
     const d=r?await r.json().catch(()=>null):null;const got=(d?.kept||[]).filter((k:{file?:TFile})=>k.file) as {url:string;file:TFile}[];
     // A copy the server found empty and could not make again is taken away (the link itself stays).
@@ -217,7 +220,9 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
     if(drop.length)setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const gone=part.filter(x=>x.key===t.key&&drop.includes(x.url)).map(x=>x.label.replace(/[^\w\u0590-\u05FF .()-]/g,'').slice(0,40));
       return gone.length&&t.files.some(f=>f.id.startsWith('k_')&&gone.some(l=>f.name.startsWith(l)))?{...t,files:t.files.filter(f=>!(f.id.startsWith('k_')&&gone.some(l=>f.name.startsWith(l))))}:t;})};save(KEY(user.id),n);return n;});
     // Only a link that could not be copied waits a day before the next try; one already kept comes back at once.
-    for(const x of part){if(!v2.includes(x.url))v2.push(x.url);if(!got.some(k=>k.url===x.url))tried[x.url]=Date.now();}try{localStorage.setItem(V2,JSON.stringify(v2.slice(-300)));}catch{}try{localStorage.setItem(TRY,JSON.stringify(tried));}catch{}if(!got.length)continue;
+    // Only a link the server tried and could not keep waits before the next try; one it had no time for, or a call that failed, is asked again next time.
+    const failed=(d?.kept||[]).filter((k:{failed?:boolean})=>k.failed).map((k:{url:string})=>k.url) as string[];
+    for(const x of part){if(got.some(k=>k.url===x.url)||failed.includes(x.url)){if(!v2.includes(x.url))v2.push(x.url);}if(failed.includes(x.url))tried[x.url]=Date.now();}try{localStorage.setItem(V2,JSON.stringify(v2.slice(-300)));}catch{}try{localStorage.setItem(TRY,JSON.stringify(tried));}catch{}if(!got.length)continue;
     setStore(s=>{const n={...s,tickets:s.tickets.map(t=>{const add=got.filter(k=>part.some(x=>x.key===t.key&&x.url===k.url)).map(k=>k.file).filter(f=>!t.files.some(g=>g.id===f.id));const stem=(n:string)=>n.replace(/\.\w+$/,'');
      return add.length?{...t,files:[...t.files.filter(g=>!(g.id.startsWith('k_')&&add.some(a=>a.msg===g.msg&&stem(a.name)===stem(g.name)))),...add]}:t;})};save(KEY(user.id),n);return n;});}}
    finally{keeping.current=false;}})();},[user,busy,store.tickets]);
@@ -283,7 +288,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   catch{setChat(c=>[...c,{role:'model',text:localAnswer(q,named.filter(t=>!hidden.includes(t.key)))||'לא הצלחתי לענות כרגע.'}]);}finally{setAsking(false);}}
  const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Unstage</div></div>;
  // Replaced tickets (a newer one came for the same order) are never shown.
- const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t),seats:cleanSeats(t.seats),venue:fullVenue(t),kind:fixKind(t.kind==='sport'&&/מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית)\)/.test(t.title)?'movie':t.kind,t.seller,t.title),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{})})),[store.tickets,names,mycx]);
+ const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t).filter(f=>!(f.id.startsWith('k_')&&NOT_TICKET.test(f.name))),seats:cleanSeats(t.seats),venue:fullVenue(t),kind:fixKind(t.kind==='sport'&&/מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית)\)/.test(t.title)?'movie':t.kind,t.seller,t.title),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{})})),[store.tickets,names,mycx]);
  const visible=useMemo(()=>{const s=q.trim().toLowerCase();return named.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[named,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)&&!t.cancelled).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
  const past=useMemo(()=>visible.filter(t=>!upcoming(t)&&!t.cancelled).sort((a,b)=>when(b).getTime()-when(a).getTime()),[visible]);
