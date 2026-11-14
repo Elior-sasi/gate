@@ -91,6 +91,16 @@ function swipeClose(close:()=>void){let y0=0,dy=0;return {
  onTouchStart:(e:React.TouchEvent<HTMLElement>)=>{const el=e.currentTarget;y0=el.scrollTop>0?-1:e.touches[0].clientY;dy=0;},
  onTouchMove:(e:React.TouchEvent<HTMLElement>)=>{if(y0<0)return;dy=Math.max(0,e.touches[0].clientY-y0);e.currentTarget.style.transform=dy?'translateY('+dy+'px)':'';},
  onTouchEnd:(e:React.TouchEvent<HTMLElement>)=>{const el=e.currentTarget;if(dy>90){close();}else{el.style.transition='transform .2s';el.style.transform='';setTimeout(()=>{el.style.transition='';},220);}y0=0;dy=0;}};}
+// Every window that opens over the app (an event, the ticket viewer, adding a ticket, sending, asking): it takes the focus when it
+// opens (VoiceOver and the keyboard start inside it), Escape closes the top one, and the focus returns to where it was.
+const MODALS:(()=>void)[]=[];let modalKeys=false;
+function useModal(onClose:()=>void){const ref=useRef<HTMLDivElement>(null);const close=useRef(onClose);close.current=onClose;
+ useEffect(()=>{const fn=()=>close.current();MODALS.push(fn);const back=document.activeElement as HTMLElement|null;
+  if(!modalKeys){modalKeys=true;addEventListener('keydown',e=>{if(e.key==='Escape'&&MODALS.length&&!document.querySelector('.zoom')){e.preventDefault();MODALS[MODALS.length-1]();}});}
+  const el=ref.current;if(el&&!el.contains(document.activeElement)){el.tabIndex=-1;el.focus({preventScroll:true});}
+  return()=>{const i=MODALS.lastIndexOf(fn);if(i>=0)MODALS.splice(i,1);if(back&&document.contains(back))back.focus({preventScroll:true});};},[]);
+ return ref;}
+function Modal({onClose,children,...p}:{onClose:()=>void;children:React.ReactNode}&React.HTMLAttributes<HTMLDivElement>){const ref=useModal(onClose);return <div ref={ref} {...p}>{children}</div>;}
 function SheetTop({close}:{close:()=>void}){return <><div className="grab" aria-hidden="true"/><button type="button" className="sheetX" aria-label="סגירה" onClick={close}><X size={20}/></button></>;}
 function useRowSlide(){const slideX=useRef<number|null>(null);
  return (count:number,pick:(i:number)=>void)=>({onTouchStart:(e:React.TouchEvent<HTMLElement>)=>{slideX.current=e.touches[0]?.clientX??null;},
@@ -320,7 +330,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   onContextMenu:(e:React.MouseEvent)=>{e.preventDefault();setMenu(t);},onClick:()=>{if(press.current.fired){press.current.fired=false;return;}setOpen(t.key);}});
  const ago=(iso:string)=>{const m=Math.round((Date.now()-new Date(iso).getTime())/6e4);return m<1?'עודכן עכשיו':m<60?'עודכן לפני '+m+' דק׳':m<1440?'עודכן לפני '+Math.round(m/60)+' שע׳':'עודכן '+new Date(iso).toLocaleDateString('he-IL',{day:'numeric',month:'numeric'});};
  const title=tab===3?'הגדרות':tab===2?'סיכום':tab===1?'השבוע':filt==='past'?'היו':filt==='cx'?'בוטלו':'האירועים שלי';
- const top=(acts:React.ReactNode)=><header className="top"><div className="row"><span className="brand" dir="ltr" aria-label="Unstage"><Logo/><span aria-hidden="true">nstage</span></span><div className="actions">{acts}</div></div><h1>{title}</h1>
+ const top=(acts:React.ReactNode)=><header className="top"><div className="row"><span className="brand" dir="ltr" role="img" aria-label="Unstage"><Logo/><span aria-hidden="true">nstage</span></span><div className="actions">{acts}</div></div><h1>{title}</h1>
   {user&&tab!==3&&prog&&busy&&<div className="progress"><div className="pbar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={prog.pct} aria-label="התקדמות הסריקה"><i style={{width:prog.pct+'%'}}/></div><div className="plabel" aria-live="polite"><span>{prog.label}</span><b>{prog.pct}%</b></div></div>}
   {user&&tab!==3&&!(prog&&busy)&&<p className="sub" role="status">{!online?'מצב לא מקוון'+(store.updated?' · עודכן לאחרונה: '+ago(store.updated).replace(/^עודכן /,''):''):busy?'בודק את Gmail…':err?'הסריקה לא הושלמה':store.updated?ago(store.updated):'ממתין לסריקה'}</p>}</header>;
  if(!configured||!user)return <main className="app">{splashEl}{top(null)}
@@ -341,7 +351,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    {tab===0&&heard&&<p className="voiceAnswer" role="status" aria-live="assertive">{heard}</p>}
    {(()=>{const rows=tab===1?week:list;const showHero=tab===0&&filt==='next'&&hero&&!q;const rest=showHero?rows.filter(t=>t.key!==hero.key):rows;
     return <>{showHero&&<Hero t={hero} press={longPress(hero)} onShow={fs=>setMenuView(fs)}/>}
-     {showHero&&rest.length>0&&<h3 className="listH">בהמשך</h3>}
+     {showHero&&rest.length>0&&<h2 className="listH">בהמשך</h2>}
      <div className="list">{rest.map((t,i)=><Card key={t.key} t={t} i={i} press={longPress(t)}/>)}</div>
      {!rest.length&&!showHero&&<section className="panel empty">{tab===1?<CalendarDays size={40}/>:filt==='past'?<History size={40}/>:<TicketIcon size={40}/>}<h2>{q?'לא נמצאו אירועים':tab===1?'אין אירועים השבוע':filt==='past'?'עוד אין אירועים שהיו':filt==='cx'?'אין אירועים שבוטלו':'אין אירועים קרובים'}</h2><p>{q?'נסה מילה אחרת.':'כרטיסים חדשים יופיעו כאן לבד.'}</p></section>}</>;})()}</>}
   </>}
@@ -352,13 +362,13 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   {sel&&<Sheet t={sel} onRemoveManual={()=>void removeMan(sel)} onEditManual={()=>{const ids=sel.files.filter(f=>f.msg.startsWith('man')).map(f=>f.msg.slice(3));void (async()=>{let it=load(MAN(user!.id),[] as ManualItem[]).find(x=>ids.includes(x.id));
    if(!it)try{const d=await fetch('/api/manual',{cache:'no-store'}).then(r=>r.json());save(MAN(user!.id),d.items||[]);it=(d.items||[]).find((x:ManualItem)=>ids.includes(x.id));}catch{}
    if(it)setEditing(it);else say('לא מצאתי את הכרטיס. נסה שוב בעוד רגע.');})();}} saved={saved.has(sel.key)} me={user?.name?.split(' ')[0]||''} onClose={close} onRename={()=>rename(sel.key)} onHide={()=>hide(sel.key)} onMarkCx={()=>markCx(sel.key)} onCopy={()=>say('הועתק')}/>}
-  {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><div className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
-   <div className="askHead"><h3><Sparkles size={19}/>שאל את Unstage</h3><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
+  {askOpen&&<div className="menuWrap" onClick={()=>setAskOpen(false)}><Modal onClose={()=>setAskOpen(false)} className="menu askSheet" role="dialog" aria-modal="true" aria-label="שאל את Unstage" onClick={e=>e.stopPropagation()} {...swipeClose(()=>setAskOpen(false))}><div className="grab" aria-hidden="true"/>
+   <div className="askHead"><h2><Sparkles size={19}/>שאל את Unstage</h2><button className="ib" aria-label="סגירה" onClick={()=>setAskOpen(false)}><X/></button></div>
    <div className="askList" aria-live="polite">{!chat.length&&<div className="askHints">{['מה האירוע הבא שלי?','כמה הוצאתי על כרטיסים השנה?','באיזה שורה אני יושב בהופעה הבאה?','מה יש לי החודש?'].map(h=><button key={h} onClick={()=>ask(h)}>{h}</button>)}</div>}
     {chat.map((m,i)=><p key={i} className={'askMsg '+m.role}>{m.text}</p>)}{asking&&<p className="askMsg model">…</p>}</div>
    <form className="askBar" onSubmit={e=>{e.preventDefault();void ask();}}><input aria-label="השאלה שלך" placeholder="שאל על האירועים שלך" value={askDraft} onChange={e=>setAskDraft(e.target.value)}/>{canListen&&<button type="button" className="ib" aria-label="לשאול בקול" onClick={()=>listen(t=>void ask(t))}><Mic/></button>}<button className="ib" aria-label="שליחה" disabled={!askDraft.trim()||asking}><Send/></button></form>
-  </div></div>}
-  {menu&&<div className="menuWrap" onClick={()=>setMenu(null)}><div className="menu" role="dialog" aria-modal="true" aria-label={'פעולות: '+menu.title} onClick={e=>e.stopPropagation()} {...swipeClose(()=>setMenu(null))}><SheetTop close={()=>setMenu(null)}/>
+  </Modal></div>}
+  {menu&&<div className="menuWrap" onClick={()=>setMenu(null)}><Modal onClose={()=>setMenu(null)} className="menu" role="dialog" aria-modal="true" aria-label={'פעולות: '+menu.title} onClick={e=>e.stopPropagation()} {...swipeClose(()=>setMenu(null))}><SheetTop close={()=>setMenu(null)}/>
    <p className="menuTitle">{bidi(menu.title)}</p>
    {(()=>{const fs=menu.files.filter(f=>!/pkpass/i.test(f.type+f.name));return fs.length>0&&<button onClick={()=>{setMenuView(fs);}}><QrCode size={20}/> {showLabel(menu)}</button>;})()}
    {where(menu)&&<div className="menuNav"><NavLinks q={where(menu)}/></div>}
@@ -367,7 +377,7 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
    {'share' in navigator&&<button onClick={()=>{navigator.share({title:menu.title,text:[menu.title,longDate(menu)+(timed(menu)?' בשעה '+time(menu):''),place(menu)].filter(Boolean).join('\n')}).catch(()=>{});setMenu(null);}}><Share2 size={20}/> שיתוף</button>}
    <button onClick={()=>{const k=menu.key;setMenu(null);rename(k);}}><Pencil size={20}/> שינוי שם</button>
    <button onClick={()=>{const k=menu.key;setMenu(null);hide(k);}}><EyeOff size={20}/> הסתר, זה לא כרטיס</button>
-  </div></div>}
+  </Modal></div>}
   {menuView&&<Viewer fs={menuView} onClose={()=>{setMenuView(null);setMenu(null);}}/>}
   {toast&&<div className="toast" role="status">{toast}</div>}
   {!sel&&<nav className={(navDrag!==null?'dragging':'')+(tab===3&&navDrag===null?' none':'')} style={{['--tab' as string]:navDrag??tab}} aria-label="ניווט" onTouchStart={e=>navSlide(e,false)} onTouchMove={e=>navSlide(e,true)} onTouchEnd={()=>setNavDrag(null)} onTouchCancel={()=>setNavDrag(null)}>{[['אירועים',TicketIcon],['השבוע',CalendarDays],['סיכום',ChartColumn]].map(([l,I],i)=>{const Ic=I as typeof Music;return <button key={i} className={tab===i?'selected':''} aria-current={tab===i?'page':undefined} onClick={()=>{setTab(i);scrollTo({top:0});}}><Ic/><span>{l as string}</span></button>;})}</nav>}
@@ -378,17 +388,18 @@ function Hero({t,press,onShow}:{t:Ticket;press:Press;onShow:(fs:TFile[])=>void})
  // The countdown keeps moving while the app is open (minutes in the last hour).
  const [,tick]=useState(0);useEffect(()=>{const i=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(i);},[]);useEffect(()=>{const pdfs=t.files.filter(f=>/pdf/i.test(f.type+f.name));if(pdfs.length){void pdfLib().catch(()=>{});pdfs.slice(0,4).forEach(f=>void bytes(fileUrl(f)).catch(()=>{}));}},[t]);const [big,unit,pre]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
  const at=when(t).getTime();const T=Math.max(.06,Math.min(1,(Date.now()-t.mailed)/Math.max(1,at-t.mailed)));
- return <button className="nextCard nc-ring" {...press} aria-label={'האירוע הבא: '+t.title+', '+big+' '+unit}>
+ // Not one big button with a button inside it: the card answers touch, and inside it the event's name and "הצג כרטיס" are two real buttons.
+ return <div className="nextCard nc-ring" {...press}>
   <div className="nc-k nc-top">האירוע הבא · {K.label}</div>
   <div className="nc-row"><svg className="ring" viewBox="0 0 92 92" aria-hidden="true"><defs><linearGradient id="ncg"><stop offset="0" stopColor="#ffd27a"/><stop offset="1" stopColor="#ff9f2e"/></linearGradient></defs>
    <circle cx="46" cy="46" r="40" fill="none" stroke="#ffffff18" strokeWidth="8"/><circle cx="46" cy="46" r="40" fill="none" stroke="url(#ncg)" strokeWidth="8" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C*(1-T)} transform="rotate(-90 46 46)"/>
    {pre&&<text x="46" y="29" fill="#ffd79a" fontSize="11" textAnchor="middle">{pre}</text>}<text x="46" y={pre?(unit?55:58):unit?50:55} fill="#fff" fontSize={pre?(big.length>3?18:24):big.length>3?20:big.length>2?26:34} fontWeight="700" textAnchor="middle">{big}</text>{unit&&<text x="46" y="68" fill="#ffd79a" fontSize="11" textAnchor="middle">{unit.split(' ')[0]}</text>}</svg>
    <div className="nc-info"/><DateTile t={t}/></div>
-  <div className="nc-nm nc-full"><Title s={t.title}/></div>
+  <button type="button" className="nc-nm nc-full nc-open" aria-label={'האירוע הבא: '+t.title+', '+[pre,big,unit].filter(Boolean).join(' ')} onClick={e=>{e.stopPropagation();(press.onClick as ()=>void)();}}><Title s={t.title}/></button>
   <div className="nc-chips" aria-hidden="true">{timed(t)&&<span>{time(t)}</span>}{place(t)&&<span>{bidi(place(t))}</span>}{t.seats.length>0&&<span>{t.seats.length===1?t.seats[0]:t.seats.length+' מקומות'}</span>}</div>
   {/* "הצג כרטיס" opens the tickets themselves, all of them, straight away (the rest of the card opens the event). */}
-  {t.files.length>0&&!t.cancelled&&<div className="nc-go" role="button" tabIndex={0} onClick={e=>{e.stopPropagation();onShow(t.files.filter(f=>!/pkpass/i.test(f.type+f.name)));}} onTouchStart={e=>e.stopPropagation()}><QrCode size={20}/>{showLabel(t)}</div>}
- </button>;}
+  {t.files.length>0&&!t.cancelled&&<button type="button" className="nc-go" onClick={e=>{e.stopPropagation();onShow(t.files.filter(f=>!/pkpass/i.test(f.type+f.name)));}} onTouchStart={e=>e.stopPropagation()}><QrCode size={20}/>{showLabel(t)}</button>}
+ </div>;}
 // Cancelling: the terms as the mail states them (or the seller's, or the law's), the deadline, and a way to do it.
 function CancelBox({t}:{t:Ticket}){const s=sellerCancel(t);const text=t.cancel?.text||s?.note||LAW.note;const url=t.cancel?.url||s?.url||(!t.cancel?.text&&!s?LAW.url:undefined);
  const label=t.cancel?.url?(t.cancel.label&&t.cancel.label.length<24?t.cancel.label:'לביטול ההזמנה'):s?.label||LAW.label;const c=contacts(t.cancel?.text||'');const tel=s?.tel||c.tel;const mail=s?.mail||c.mail;
@@ -411,7 +422,8 @@ function Gift({t,me,onClose}:{t:Ticket;me:string;onClose:()=>void}){const docs=t
    const text=(count>1?count+' כרטיסים ל':'כרטיס ל')+t.title+' - '+longDate(t)+(timed(t)?' בשעה '+time(t):'');
    if(navigator.share)await navigator.share({title:t.title,text,url:d.url}).catch(()=>{});else{await navigator.clipboard?.writeText(d.url).catch(()=>{});setMsg('הקישור הועתק');}}
   catch(e){setMsg(e instanceof Error?e.message:'לא הצלחתי ליצור קישור');}finally{setBusy(false);}};
- return <div className="menuWrap" onClick={onClose}><div className="menu" role="dialog" aria-modal="true" aria-label={nTickets(t)>1?'שליחת כרטיסים':'שליחת כרטיס'} onClick={e=>e.stopPropagation()} {...swipeClose(onClose)}><SheetTop close={onClose}/>
+ const mref=useModal(onClose);
+ return <div className="menuWrap" onClick={onClose}><div ref={mref} className="menu" role="dialog" aria-modal="true" aria-label={nTickets(t)>1?'שליחת כרטיסים':'שליחת כרטיס'} onClick={e=>e.stopPropagation()} {...swipeClose(onClose)}><SheetTop close={onClose}/>
   <h2 style={{margin:'4px 0 6px',fontSize:'calc(20px*var(--fs))'}}>{nTickets(t)>1?'שליחת כרטיסים':'שליחת כרטיס'}</h2>
   <p className="setNote" style={{marginTop:0}}>מי שיקבל את הקישור יראה רק את האירוע הזה ואת הכרטיסים שתבחר, בלי להתחבר. הקישור יפסיק לעבוד אחרי האירוע.</p>
   {opts.length>1&&<div className="giftPick">{opts.map((f,i)=>{const x=inFile(t,f);const on=pick.has(i);return <button key={f.msg+f.id} className={'giftOpt'+(on?' on':'')} aria-pressed={on} onClick={()=>{const n=new Set(pick);on?n.delete(i):n.add(i);setPick(n);setUrl('');}}>
@@ -424,7 +436,7 @@ function Gift({t,me,onClose}:{t:Ticket;me:string;onClose:()=>void}){const docs=t
 function SmsSet({link,last,onCopy,onPasted,android}:{android?:boolean;link:string;last:{at:string;kind:string;shape?:string;raw?:number}|null;onCopy:(t:string)=>void;onPasted:()=>void}){const [text,setText]=useState('');const [msg,setMsg]=useState('');const [busy,setBusy]=useState(false);
  const paste=async()=>{if(!text.trim())return;setBusy(true);setMsg('');try{const r=await fetch(link,{method:'POST',headers:{'Content-Type':'text/plain'},body:text});const d=await r.json().catch(()=>({}));
    setMsg(!d.ticket?'לא מצאתי בהודעה קישור לכרטיס.':d.kept?'הכרטיס נשמר ✓':'קיבלתי את ההודעה, אבל לא הצלחתי לפתוח את הקישור לכרטיס.');if(d.ticket){setText('');onPasted();}}catch{setMsg('לא הצלחתי לשלוח. נסה שוב.');}finally{setBusy(false);}};
- return <details className="set setFold"><summary><h3><Smartphone size={18}/>כרטיסים מ-SMS</h3>{last?.kind==='ticket'&&<span className="bstate on">מוגדר ✓</span>}<ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
+ return <details className="set setFold"><summary><h3 aria-level={2}><Smartphone size={18}/>כרטיסים מ-SMS</h3>{last?.kind==='ticket'&&<span className="bstate on">מוגדר ✓</span>}<ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
   {!android&&<><p className="setNote">יש מקומות ששולחים את הכרטיס ב-SMS ולא במייל, כמו הסינמטק. הכרטיס נשמר ומצטרף לאירוע שלו. מגדירים פעם אחת באפליקציית קיצורי הדרך:</p>
   <ol className="steps2"><li>קיצורים ← אוטומציה ← אוטומציה חדשה ← <b>הודעה</b>.</li><li>"ההודעה מכילה": <b>כרטיס</b>. בחר <b>הרץ מיד</b>.</li><li>פעולה: <b>קבל תוכן של URL</b>. בכתובת הדבק את הקישור האישי, שיטה <b>POST</b>, גוף בקשה <b>טקסט</b> = תוכן ההודעה.</li></ol>
   <button className="ghost" onClick={()=>onCopy(link)}><Copy size={18}/>העתקת הקישור האישי</button></>}
@@ -436,15 +448,16 @@ function SmsSet({link,last,onCopy,onPasted,android}:{android?:boolean;link:strin
   {!android&&<p className="setNote">הקישור אישי. אל תשתף אותו.</p>}</details>;}
 type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
- return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press} aria-label={t.title+', '+longDate(t)}><div className="c">
+ return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press}><div className="c">
   <DateTile t={t}/>
-  <div className="info"><div className="nm"><Title s={t.title}/></div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
+  <div className="info"><div className="nm"><Title s={t.title}/><span className="sr">, {longDate(t)}</span></div>{place(t)&&<div className="meta"><span>{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
     {n>0&&n<=14&&!t.cancelled&&<span className="eta">{n===1?<b>מחר</b>:n===2?<>בעוד <b>יומיים</b></>:<>בעוד <b>{n} ימים</b></>}</span>}{t.files.length>0&&!t.cancelled&&<span className="eta">🎟 {nTickets(t)>1?nTickets(t)+' כרטיסים':'כרטיס'}</span>}</div></div></div></button>;}
 function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManual,onEditManual}:{onRemoveManual:()=>void;onEditManual:()=>void;t:Ticket&{mine?:boolean};saved:boolean;me:string;onClose:()=>void;onRename:()=>void;onHide:()=>void;onMarkCx:()=>void;onCopy:()=>void}){const [view,setView]=useState<TFile[]|null>(null);const [gift,setGift]=useState(false);useEffect(()=>{if(t.files.some(f=>/pdf/i.test(f.type+f.name)))pdfLib().catch(()=>{});},[t]);const K=KIND[t.kind];const [n,u,pre]=countdown(t);const w=where(t);
  useEffect(()=>{scrollTo({top:0});},[]);
  const copy=(s:string)=>{navigator.clipboard?.writeText(s).then(onCopy,()=>{});};
- return <div className="sheet" role="dialog" aria-label={t.title}>
+ const mref=useModal(onClose);
+ return <div ref={mref} className="sheet" role="dialog" aria-modal="true" aria-label={t.title}>
   {view&&<Viewer fs={view} onClose={()=>setView(null)}/>}
   {gift&&<Gift t={t} me={me} onClose={()=>setGift(false)}/>}
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><div className="actions">{typeof navigator!=='undefined'&&'share' in navigator&&<button className="ib" aria-label="שיתוף" onClick={()=>navigator.share({title:t.title,text:[t.title,longDate(t)+(timed(t)?' בשעה '+time(t):''),place(t)].filter(Boolean).join('\n')}).catch(()=>{})}><Share2/></button>}<button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div></div>
@@ -520,7 +533,8 @@ function AddTicket({events,onClose,onSaved,edit}:{events:Ticket[];onClose:()=>vo
    const r=await fetch('/api/manual',{method:edit?'PATCH':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));
    if(!r.ok||!d.item)throw new Error(d.error==='big'?'הקובץ גדול מדי.':'לא הצלחתי לשמור. נסה שוב.');onSaved(d.item);}catch(e){setMsg(e instanceof Error?e.message:'לא הצלחתי לשמור.');}finally{setBusy(false);}};
  useEffect(()=>()=>{if(file)URL.revokeObjectURL(file.url);},[file]);
- return <div className="sheet addTicket" role="dialog" aria-modal="true" aria-label={edit?'עריכת כרטיס':'הוספת כרטיס'}>
+ const mref=useModal(onClose);
+ return <div ref={mref} className="sheet addTicket" role="dialog" aria-modal="true" aria-label={edit?'עריכת כרטיס':'הוספת כרטיס'}>
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button></div>
   <h2>{edit?'עריכת כרטיס':'הוספת כרטיס'}</h2>
   {!edit&&<p className="setNote">כרטיס שקיבלת כתמונה או כ-PDF, למשל בוואטסאפ אחרי תשלום בפייבוקס.</p>}
@@ -561,7 +575,7 @@ function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,on
  const [android,setAndroid]=useState(false);useEffect(()=>{setAndroid(/Android/i.test(navigator.userAgent));},[]);
  const slideSize=useRowSlide();const speakUrl=srv?.widget?.replace('/api/widget','/api/speak');
  return <><div className="settings">
-  <div className="set"><h3><Bell size={18}/>התראות</h3>
+  <div className="set"><h3 aria-level={2}><Bell size={18}/>התראות</h3>
    <p className="setNote">ערב לפני כל אירוע, שלוש שעות לפני עם הכרטיס מוכן, וכשמגיע כרטיס חדש למייל.</p>
    {noDb?<p className="setNote">השרת עוד לא חובר למסד נתונים.</p>
     :push==='install'?<p className="setNote">באייפון התראות עובדות רק מהאפליקציה שבמסך הבית: שיתוף ← <b>הוסף למסך הבית</b>, ואז לפתוח משם.</p>
@@ -570,25 +584,25 @@ function SettingsView({user,srv,push,pushMsg,onPush,onTest,onCopy,hiddenCount,on
     :<><button className={push==='on'?'ghost':'primary'} disabled={push==='busy'||push==='checking'||!srv} onClick={onPush}>{push==='on'?<><BellOff size={18}/>כיבוי התראות</>:<><Bell size={18}/>הפעלת התראות</>}</button>
      {push==='on'&&<button className="ghost" onClick={onTest}><Check size={18}/>התראת בדיקה</button>}</>}
    {pushMsg&&<p className="setNote">{pushMsg}</p>}</div>
-  <div className="set"><h3><Type size={18}/>גודל טקסט</h3><div className="seg" role="radiogroup" aria-label="גודל טקסט" {...slideSize(3,onSize)}>{['רגיל','גדול','גדול מאוד'].map((l,i)=><button key={i} role="radio" aria-checked={size===i} className={size===i?'on':''} onClick={()=>onSize(i)}>{l}</button>)}</div></div>
+  <div className="set"><h3 aria-level={2}><Type size={18}/>גודל טקסט</h3><div className="seg" role="radiogroup" aria-label="גודל טקסט" {...slideSize(3,onSize)}>{['רגיל','גדול','גדול מאוד'].map((l,i)=><button key={i} role="radio" aria-checked={size===i} className={size===i?'on':''} onClick={()=>onSize(i)}>{l}</button>)}</div></div>
   {(srv?.calendar||srv?.sms||srv?.widget)&&<h2 className="setGroup">הגדרות חד־פעמיות</h2>}
-  {srv?.calendar&&<details className="set setFold"><summary><h3><CalendarSync size={18}/>יומן שמתעדכן לבד</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
+  {srv?.calendar&&<details className="set setFold"><summary><h3 aria-level={2}><CalendarSync size={18}/>יומן שמתעדכן לבד</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
    <p className="setNote">כל האירועים מופיעים ביומן של הטלפון, עם תזכורת שעתיים לפני. כרטיס חדש נכנס ליומן בעצמו.</p>
    {!android&&<a className="primary" href={srv.calendar}><CalendarPlus size={18}/>הוספה ליומן של האייפון</a>}
    <button className="ghost" onClick={()=>onCopy(srv.calendar!.replace(/^webcal/,'https'))}><Copy size={18}/>העתקת הקישור (ל-Google Calendar)</button></details>}
   {srv?.sms&&<SmsSet android={android} link={srv.sms} last={smsLast} onCopy={onCopy} onPasted={onSmsPasted}/>}
-  {srv?.widget&&!android&&<details className="set setFold"><summary><h3><Smartphone size={18}/>ווידג'ט למסך הבית ולמסך הנעילה</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
+  {srv?.widget&&!android&&<details className="set setFold"><summary><h3 aria-level={2}><Smartphone size={18}/>ווידג'ט למסך הבית ולמסך הנעילה</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
    <p className="setNote">מראה את האירוע הבא ומה אחריו. עובד דרך אפליקציית <b>Scriptable</b> (חינם ב-App Store).</p>
    <ol className="steps2"><li>העתק את הסקריפט.</li><li>ב-Scriptable: <b>+</b>, הדבק ושמור בשם <b>Unstage</b>.</li><li>במסך הבית: לחיצה ארוכה ← <b>+</b> ← Scriptable ← גודל בינוני. בהגדרות הווידג'ט בחר את הסקריפט <b>Unstage</b>.</li><li>גם למסך הנעילה: התאמה אישית ← מסך נעילה ← Scriptable, ובחר <b>Unstage</b>.</li></ol>
    <button className="ghost" onClick={()=>onCopy(widgetScript(srv.widget!))}><Copy size={18}/>העתקת הסקריפט</button></details>}
-  {speakUrl&&!android&&<details className="set setFold"><summary><h3><Mic size={18}/>לשאול את Siri</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
+  {speakUrl&&!android&&<details className="set setFold"><summary><h3 aria-level={2}><Mic size={18}/>לשאול את Siri</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary>
    <p className="setNote">אומרים "היי Siri, מה האירוע הבא שלי" ושומעים מה, מתי ואיפה.</p>
    <ol className="steps2"><li>העתק את הקישור האישי.</li><li>באפליקציית קיצורים: <b>+</b> ← הוסף פעולה <b>קבל תוכן של URL</b> והדבק את הקישור.</li><li>הוסף פעולה <b>דבר טקסט</b>.</li><li>שמור את הקיצור בשם <b>מה האירוע הבא שלי</b>.</li></ol>
    <button className="ghost" onClick={()=>onCopy(speakUrl)}><Copy size={18}/>העתקת הקישור האישי</button>
    <button className="ghost" onClick={async()=>{try{const t=await (await fetch(speakUrl,{cache:'no-store'})).text();const u=new SpeechSynthesisUtterance(t);u.lang='he-IL';speechSynthesis.cancel();speechSynthesis.speak(u);}catch{}}}><Volume2 size={18}/>השמע עכשיו</button></details>}
-  <details className="set setFold setAdv"><summary><h3><RefreshCw size={18}/>מתקדם</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary><p className="setNote">Unstage קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
+  <details className="set setFold setAdv"><summary><h3 aria-level={2}><RefreshCw size={18}/>מתקדם</h3><ChevronLeft className="foldIc" size={20} aria-hidden="true"/></summary><p className="setNote">Unstage קורא מיילים של כרטיסים מהשנתיים האחרונות. סריקה מלאה קוראת הכל מחדש.</p><button className="ghost" onClick={onRescan}><RotateCcw size={18}/>סריקה מלאה מחדש</button>
    {hiddenCount>0&&<button className="ghost" onClick={onRestore}><EyeOff size={18}/>החזרת {hiddenCount} אירועים מוסתרים</button>}</details>
-  <div className="set"><h3><Mail size={18}/>חשבון</h3><p className="setNote"><b>{user.name}</b><br/><span dir="ltr">{user.email}</span></p><button className="ghost" onClick={()=>void clearDevice().finally(()=>signOut({redirectTo:'/'}))}><LogOut size={18}/>יציאה</button></div>
+  <div className="set"><h3 aria-level={2}><Mail size={18}/>חשבון</h3><p className="setNote"><b>{user.name}</b><br/><span dir="ltr">{user.email}</span></p><button className="ghost" onClick={()=>void clearDevice().finally(()=>signOut({redirectTo:'/'}))}><LogOut size={18}/>יציאה</button></div>
   <p className="footnote">הגישה ל-Gmail היא לקריאה בלבד. רשימת האירועים נשמרת בטלפון, ועותק שלה בשרת בשביל התזכורות, היומן והווידג'ט. קובצי הכרטיס נפתחים ישירות מהמייל שלך. <a href="/privacy">פרטיות</a></p></div></>;}
 
 // Summary tab: how many events, what kind, where, and what they cost.
@@ -602,9 +616,9 @@ function Summary({list}:{list:Ticket[]}){const slide=useRowSlide();const y=new D
  return <><div className="statsWrap">
   {years.length>1&&<div className="seg" role="radiogroup" aria-label="שנה" {...slide(years.length,i=>setYr(years[i]))}>{years.map(v=><button key={v} role="radio" aria-checked={v===yr} className={v===yr?'on':''} onClick={()=>setYr(v)}>{v}</button>)}</div>}
   <div className="statGrid"><div className="stat"><b>{inYear.length}</b><span>אירועים</span></div><div className="stat"><b>{past}</b><span>היו</span></div><div className="stat"><b>{inYear.length-past}</b><span>בדרך</span></div></div>
-  {spent>0&&<div className="box"><h3><Wallet/>הוצאות על כרטיסים</h3><div className="moneyBig"><b dir="ltr">₪{Math.round(spent).toLocaleString('he-IL')}</b></div></div>}
-  {kinds.length>0&&<div className="box"><h3><TicketIcon/>לפי סוג</h3>{kinds.map(([k,n])=>{const K=KIND[k as Kind];return <div className="kindRow" key={k}><span><K.Icon size={16}/>{K.label}</span><i style={{width:(n/max*100)+'%'}}/><b>{n}</b></div>;})}</div>}
-  {venues.length>0&&<div className="box"><h3><MapPin/>המקומות שלך</h3>{venues.map(([v,n])=><div className="kv" key={v}><span style={{whiteSpace:'normal'}}>{bidi(v)}</span><b style={{color:'var(--ink)'}}>{n}</b></div>)}</div>}
+  {spent>0&&<div className="box"><h3 aria-level={2}><Wallet/>הוצאות על כרטיסים</h3><div className="moneyBig"><b dir="ltr">₪{Math.round(spent).toLocaleString('he-IL')}</b></div></div>}
+  {kinds.length>0&&<div className="box"><h3 aria-level={2}><TicketIcon/>לפי סוג</h3>{kinds.map(([k,n])=>{const K=KIND[k as Kind];return <div className="kindRow" key={k}><span><K.Icon size={16}/>{K.label}</span><i style={{width:(n/max*100)+'%'}}/><b>{n}</b></div>;})}</div>}
+  {venues.length>0&&<div className="box"><h3 aria-level={2}><MapPin/>המקומות שלך</h3>{venues.map(([v,n])=><div className="kv" key={v}><span style={{whiteSpace:'normal'}}>{bidi(v)}</span><b style={{color:'var(--ink)'}}>{n}</b></div>)}</div>}
   {!inYear.length&&<div className="panel"><ChartColumn size={40}/><h2>עוד אין נתונים</h2><p>אחרי שיהיו כרטיסים, יופיע כאן סיכום.</p></div>}</div></>;}
 
 // pdf.js is served from this site (public/pdfjs, the legacy build for older Safari) and loaded ahead when an event opens.
@@ -639,7 +653,7 @@ function Doc({f,onZoom,first=true}:{f:TFile;onZoom:(src:string)=>void;first?:boo
  return <div className="doc" ref={box}>{page&&<iframe className="pdfFrame keptPage" src={fileUrl(f)} title="הכרטיס" sandbox=""/>}{img&&<img className={/svg/.test(f.type)||f.id.startsWith('k_')&&/png/.test(f.type)?'cards':undefined} src={fileUrl(f)} alt="ברקוד הכרטיס" onClick={()=>onZoom(fileUrl(f))}/>}{frame&&<iframe className="pdfFrame" src={frame} title="הכרטיס"/>}{busy&&!img&&(first?<div className="loader"><Mark cls="lmark" anim="bob"/><p>{'פותח את הכרטיס…'}</p></div>:<div className="docWait" aria-hidden="true"/>)}{err&&<p className="setNote" style={{textAlign:'center'}}>{err} <a href={fileUrl(f)} target="_blank" rel="noopener">פתיחה בדפדפן</a></p>}</div>;}
 // Full-screen ticket viewer with a close button (a home-screen app has no browser back button): one file, or all of an event's tickets one under the other.
 function Viewer({fs,onClose}:{fs:TFile[];onClose:()=>void}){const [zoom,setZoom]=useState('');
- return <div className="viewer" role="dialog" aria-label={fs.length>1?'כל הכרטיסים':'הכרטיס'}>{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
+ const mref=useModal(onClose);return <div ref={mref} className="viewer" role="dialog" aria-modal="true" aria-label={fs.length>1?'כל הכרטיסים':'הכרטיס'}>{zoom&&<Zoom src={zoom} alt="הכרטיס" onClose={()=>setZoom('')}/>}
   <div className="viewerTop"><button className="ib" onClick={onClose} aria-label="סגירה"><X/></button><button className="ib" aria-label="שמירה או שיתוף" onClick={()=>void shareFiles(fs)}><Share2/></button></div>
   <div className="viewerBody">{fs.map((f,i)=><Doc key={f.msg+f.id} f={f} onZoom={setZoom} first={i===0}/>)}</div>
  </div>;}
