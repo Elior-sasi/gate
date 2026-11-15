@@ -166,6 +166,9 @@ export async function readTicket(m:Message,last=false):Promise<Read>{
  // ("ביטול הזמנה 74593-…") is about that order, so it keeps the number and joins the purchase it cancels.
  if(ai.ok){let t=ai.ticket;
   if(!t&&(rule?.cancelled||rule?.restored)&&rule.order)t=rule;
+  // Gemini sometimes says a plain order confirmation is no ticket ("collect at the box office", a link instead of a file).
+  // A full reading by the rules - name, date and time, and an order number or seats - is a ticket all the same.
+  if(!t&&rule&&!rule.cancelled&&rule.title&&/T\d\d:\d\d/.test(rule.start)&&(rule.order||rule.seats.length)&&looksLikePurchase(m))t=rule;
   if(t&&rule?.order&&(!t.order||t.cancelled))t={...t,order:rule.order};
   // Gemini sometimes gives only the hall ("אולם 15"); the rules know the branch ("פלאנט איילון - אולם 15").
   // The show named in a Smarticket subject is the name, not the venue Gemini sometimes takes for it.

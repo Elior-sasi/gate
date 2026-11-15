@@ -136,7 +136,7 @@ export default function App({user,gmail,configured,login}:{user:User|null;gmail:
   try{const base:Store=fresh?{tickets:[],read:[],updated:''}:load(KEY(user.id),{tickets:[],read:[],updated:''});
    const r=await fetch('/api/tickets',{cache:'no-store'});const j=await r.json().catch(()=>({error:'הסריקה לא הושלמה. נסה שוב.'}));if(!r.ok)throw new Error(j.error||'הסריקה נכשלה');
    // A seller's mail from the last weeks that was read but gave no event (the reading failed then) is read again, at most every 3 days.
-   const RR='gate:reread:'+user.id;let rr:Record<string,number>={};try{rr=JSON.parse(localStorage.getItem(RR)||'{}');}catch{}
+   const RR='gate:reread2:'+user.id;let rr:Record<string,number>={};try{rr=JSON.parse(localStorage.getItem(RR)||'{}');}catch{}
    const inEvents=new Set(base.tickets.flatMap(t=>[...t.msgs,...t.files.map(f=>f.msg)]));
    const again=((j.sellers||[]) as string[]).filter(id=>base.read.includes(id)&&!inEvents.has(id)&&Date.now()-(rr[id]||0)>3*864e5).slice(0,24);
    for(const id of again)rr[id]=Date.now();try{localStorage.setItem(RR,JSON.stringify(rr));}catch{}
