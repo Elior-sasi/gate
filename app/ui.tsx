@@ -70,6 +70,8 @@ function reread(st:{tickets:Ticket[];read:string[];updated:string},uid:string){c
  const bad=st.tickets.filter(t=>/smarticket/i.test(t.seller||'')||t.title===t.provider||/^(?:cinema-city|lev|cinema|jer-cin)\.co/i.test(t.seller||'')&&Date.now()-t.mailed<60*864e5||/^(?:סינמטק|קולנוע|cinema)\s\S+$/i.test(t.title.trim()));
  if(!bad.length)return st;const msgs=new Set(bad.flatMap(t=>t.msgs));
  const n={...st,tickets:st.tickets.filter(t=>!bad.includes(t)),read:st.read.filter(m=>!msgs.has(m))};try{localStorage.setItem('gate:v12:'+uid,JSON.stringify(n));}catch{}return n;}
+// The event's picture as a CSS variable (only an https address, quoted safely).
+const picVar=(t:{image?:string})=>t.image&&/^https:\/\//.test(t.image)?{['--pic' as string]:'url("'+t.image.replace(/["\\\n\r]/g,encodeURIComponent)+'")'}:{};
 const bidi=(s:string)=>s.replace(/[A-Za-z0-9][A-Za-z0-9 .\/()+&'":,!?–—-]*[A-Za-z0-9)!?]/g,m=>'\u2066'+m+'\u2069');
 const NAM=(u:string)=>'gate:names:'+u;
 // Events the user marked cancelled by hand (some sellers send no cancellation mail, e.g. a cancel by SMS or at the box office).
@@ -305,7 +307,17 @@ const res=await fetch('/api/tickets',{method:'POST',headers:{'Content-Type':'app
   catch{setChat(c=>[...c,{role:'model',text:localAnswer(q,named.filter(t=>!hidden.includes(t.key)))||'לא הצלחתי לענות כרגע.'}]);}finally{setAsking(false);}}
  const splashEl=splash!=='off'&&<div className={'splash'+(splash==='out'?' out':'')} aria-hidden="true"><Mark cls="smark" anim="draw"/><div className="sname" dir="ltr">Unstage</div></div>;
  // Replaced tickets (a newer one came for the same order) are never shown.
- const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t).filter(f=>!(f.id.startsWith('k_')&&NOT_TICKET.test(f.name))),seats:cleanSeats(t.seats),venue:fullVenue(t),kind:fixKind(t.kind==='sport'&&/מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית)\)/.test(t.title)?'movie':t.kind,t.seller,t.title),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{})})),[store.tickets,names,mycx]);
+// Pictures for events whose mail had none (a film's poster, the event page's picture): asked once, kept on the phone.
+ const PICS=(u:string)=>'gate:pics:'+u;const [pics,setPics]=useState<Record<string,{u:string|null;at:number}>>({});
+ useEffect(()=>{if(user)setPics(load(PICS(user.id),{}));},[user]);
+ const picking=useRef(false);
+ useEffect(()=>{if(!user||user.id==='demo'||busy||picking.current||!navigator.onLine)return;
+  const need=store.tickets.filter(t=>t.start&&!t.image&&(!pics[t.key]||(!pics[t.key].u&&Date.now()-pics[t.key].at>7*864e5))).sort((a,b)=>b.start.localeCompare(a.start)).slice(0,8);
+  if(!need.length)return;picking.current=true;
+  void fetch('/api/poster',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items:need.map(t=>({key:t.key,title:names[t.key]||t.title,kind:fixKind(t.kind,t.seller,t.title),start:t.start,...(t.links[0]?.url&&/^https:/.test(t.links[0].url)?{url:t.links[0].url}:{})}))})})
+   .then(r=>r.ok?r.json():null).then(d=>{if(!d?.pics)return;setPics(p=>{const n={...p};for(const t of need)n[t.key]={u:d.pics[t.key]||null,at:Date.now()};save(PICS(user.id),n);return n;});})
+   .catch(()=>{}).finally(()=>{picking.current=false;});},[user,busy,store.tickets,pics,names]);
+ const named=useMemo(()=>store.tickets.filter(t=>t.start).map(t=>({...t,files:current(t).filter(f=>!(f.id.startsWith('k_')&&NOT_TICKET.test(f.name))),seats:cleanSeats(t.seats),venue:fullVenue(t),kind:fixKind(t.kind==='sport'&&/מדובב|מתורגם|כתוביות|\((?:עברית|אנגלית)\)/.test(t.title)?'movie':t.kind,t.seller,t.title),...(names[t.key]?{title:names[t.key]}:{}),...(mycx.includes(t.key)?{cancelled:true,mine:true}:{}),image:t.image||pics[t.key]?.u||undefined})),[store.tickets,names,mycx,pics]);
  const visible=useMemo(()=>{const s=q.trim().toLowerCase();return named.filter(t=>!hidden.includes(t.key)&&(!s||[t.title,t.venue,t.city,t.provider].some(x=>x?.toLowerCase().includes(s))));},[named,hidden,q]);
  const next=useMemo(()=>visible.filter(t=>upcoming(t)&&!t.cancelled).sort((a,b)=>when(a).getTime()-when(b).getTime()),[visible]);
  const past=useMemo(()=>visible.filter(t=>!upcoming(t)&&!t.cancelled).sort((a,b)=>when(b).getTime()-when(a).getTime()),[visible]);
@@ -396,7 +408,7 @@ function Hero({t,press,onShow}:{t:Ticket;press:Press;onShow:(fs:TFile[])=>void})
  const [,tick]=useState(0);useEffect(()=>{const i=setInterval(()=>tick(x=>x+1),30000);return()=>clearInterval(i);},[]);useEffect(()=>{const pdfs=t.files.filter(f=>/pdf/i.test(f.type+f.name));if(pdfs.length){void pdfLib().catch(()=>{});pdfs.slice(0,4).forEach(f=>void bytes(fileUrl(f)).catch(()=>{}));}},[t]);const [big,unit,pre]=countdown(t);const K=KIND[t.kind];const C=2*Math.PI*40;
  const at=when(t).getTime();const T=Math.max(.06,Math.min(1,(Date.now()-t.mailed)/Math.max(1,at-t.mailed)));
  // Not one big button with a button inside it: the card answers touch, and inside it the event's name and "הצג כרטיס" are two real buttons.
- return <div className="nextCard nc-ring" {...press}>
+ return <div className={'nextCard nc-ring'+(t.image?' pic':'')} style={picVar(t)} {...press}>
   <div className="nc-k nc-top">האירוע הבא · {K.label}</div>
   <div className="nc-row"><svg className="ring" viewBox="0 0 92 92" aria-hidden="true"><defs><linearGradient id="ncg"><stop offset="0" stopColor="#ffd27a"/><stop offset="1" stopColor="#ff9f2e"/></linearGradient></defs>
    <circle cx="46" cy="46" r="40" fill="none" stroke="#ffffff18" strokeWidth="8"/><circle cx="46" cy="46" r="40" fill="none" stroke="url(#ncg)" strokeWidth="8" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C*(1-T)} transform="rotate(-90 46 46)"/>
@@ -455,7 +467,7 @@ function SmsSet({link,last,onCopy,onPasted,android}:{android?:boolean;link:strin
   {!android&&<p className="setNote">הקישור אישי. אל תשתף אותו.</p>}</details>;}
 type Press=Record<string,unknown>;
 function Card({t,i=0,press}:{t:Ticket;i?:number;press:Press}){const n=daysTo(t);const K=KIND[t.kind];
- return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')} style={{['--i' as string]:Math.min(i,8)}} {...press}><div className="c">
+ return <button className={'card'+(n===0?' focus':'')+(n<0?' past':'')+(t.cancelled?' cx':'')+(t.image?' pic':'')} style={{['--i' as string]:Math.min(i,8),...picVar(t)}} {...press}><div className="c">
   <DateTile t={t}/>
   <div className="info"><div className="nm"><Title s={t.title}/><span className="sr">, {longDate(t)}</span></div>{place(t)&&<div className="meta"><span dir="auto">{bidi(place(t))}</span></div>}
    <div className="st">{t.cancelled?<span className="pill bad">בוטל</span>:<span className={'pill'+(n===0?' warn':n<0?' ok':'')}><K.Icon/>{K.label}</span>}{timed(t)&&<span className="eta"><b>{time(t)}</b></span>}
@@ -468,7 +480,7 @@ function Sheet({t,saved,me,onClose,onRename,onHide,onMarkCx,onCopy,onRemoveManua
   {view&&<Viewer fs={view} onClose={()=>setView(null)}/>}
   {gift&&<Gift t={t} me={me} onClose={()=>setGift(false)}/>}
   <div className="sheetTop"><button className="ib" onClick={onClose} aria-label="חזרה"><ChevronRight/></button><div className="actions">{typeof navigator!=='undefined'&&'share' in navigator&&<button className="ib" aria-label="שיתוף" onClick={()=>navigator.share({title:t.title,text:[t.title,longDate(t)+(timed(t)?' בשעה '+time(t):''),place(t)].filter(Boolean).join('\n')}).catch(()=>{})}><Share2/></button>}<button className="ib" onClick={onRename} aria-label="שינוי שם"><Pencil/></button></div></div>
-  <div className="stub"><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2><Title s={t.title}/></h2>
+  <div className={'stub'+(t.image?' pic':'')} style={picVar(t)}><div className="k"><K.Icon size={17}/>{K.label}{t.provider&&' · '+t.provider}</div><h2><Title s={t.title}/></h2>
    <div className="when"><div><span>תאריך</span><b>{longDate(t)}</b></div>{timed(t)&&<div><span>שעה</span><b>{time(t)}</b></div>}{t.doors&&<div><span>דלתות</span><b>{t.doors}</b></div>}</div>
    <div className="perf"/>{t.cancelled?<div className="cd"><b style={{color:'var(--bad)'}}>בוטל</b></div>:<div className="cd">{pre&&<span>{pre}</span>}<b>{n}</b>{u&&<span>{u}</span>}</div>}</div>
   {!t.cancelled&&t.parts&&status(t.parts).some&&<p className="setNote" style={{color:'var(--bad)',textAlign:'center'}}>חלק מההזמנות בוטלו. הכרטיסים והמחיר כאן הם רק של מה שבתוקף.</p>}

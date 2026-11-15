@@ -70,7 +70,7 @@ export function combine(o:Ticket,t:Ticket):Ticket{
  const venue=pick(A(o,'venue'),A(t,'venue'),(x,y)=>norm(x)===norm(y)||norm(x).includes(norm(y))||norm(y).includes(norm(x)));
  const doors=pick(A(o,'doors'),A(t,'doors'),(x,y)=>x===y);
  const venueFrom=venue.v===t.venue?t:o;const all=[...o.files,...t.files.filter(f=>!o.files.some(g=>g.id===f.id||(g.name===f.name&&g.size===f.size&&g.msg===f.msg)))];
- return {...best,parts:kept,seats:tot.seats,count:tot.count,price:tot.price??best.price,order:tot.orders.length>1?tot.orders.join(', '):best.order||tot.orders[0],
+ return {...best,image:best.image||o.image||t.image,parts:kept,seats:tot.seats,count:tot.count,price:tot.price??best.price,order:tot.orders.length>1?tot.orders.join(', '):best.order||tot.orders[0],
   start:start.v||best.start,venue:venue.v,address:venueFrom.address||best.address,city:venueFrom.city||best.city,doors:doors.v,at:{start:start.at,venue:venue.at,doors:doors.at},
   msgs:[...new Set([...o.msgs,...t.msgs])],files:freshFiles(all,parts).slice(-16),
   links:[...o.links,...t.links.filter(l=>!o.links.some(x=>x.url===l.url))].slice(0,4),cancelled:status(parts).cancelled,mailed:Math.max(o.mailed,t.mailed),

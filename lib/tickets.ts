@@ -2,13 +2,13 @@
 // Gemini reads the mail when a key is set (stores word things very differently); the rules below are the fallback and the guard.
 import {gemini} from '@/lib/gemini';
 import {mergeAll,cleanSeats} from '@/lib/combine';
-import {bodyText,header,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
+import {bodyText,header,mailImage,ticketFiles,ticketLinks,type Message} from '@/lib/gmail';
 export type Kind='concert'|'show'|'movie'|'lecture'|'sport'|'festival'|'standup'|'party'|'con'|'other';
 // at: when its mail was sent; order: the order it belongs to; stale: replaced by a newer ticket for the same order (not shown).
 export type TFile={msg:string;id:string;name:string;type:string;size:number;at?:number;order?:string;stale?:boolean};
 // mailed: when this mail was sent; update: the mail announces a change (new time, place, seats or a replacement ticket); restored: the event is back on.
 export type Part={seats:string[];count?:number;price?:string;order?:string;ai?:boolean;cancelled?:boolean;mailed?:number;update?:boolean;restored?:boolean;into?:string};
-export type Ticket={parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
+export type Ticket={image?:string;parts?:Record<string,Part>;key:string;msgs:string[];thread:string;title:string;kind:Kind;start:string;doors?:string;venue?:string;address?:string;city?:string;
  seats:string[];count?:number;order?:string;provider?:string;price?:string;files:TFile[];links:{label:string;url:string;msg?:string}[];mailed:number;ai?:boolean;cancelled?:boolean;seller?:string;cancel?:{text?:string;url?:string;label?:string};
  update?:boolean;restored?:boolean;at?:{start?:number;venue?:number;doors?:number}};
 const HE_MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
@@ -176,10 +176,12 @@ export async function readTicket(m:Message,last=false):Promise<Read>{
   // Gemini sometimes drops the first part of a name ("קופה ראשית: הסרט" → "הסרט"): the rules' fuller name from the same line wins.
   if(t&&rule?.title&&t.title&&rule.title!==t.title&&rule.title.endsWith(t.title)&&rule.title.length<=t.title.length+40&&!/אישור|הזמנה|קולנוע|סינמה|סינמטק/.test(rule.title))t={...t,title:rule.title};
   if(t&&rule?.venue&&(!t.venue||/^(?:אולם|hall|screen|סטודיו)\s*[\w\u0590-\u05FF]{1,4}$/i.test(t.venue.trim())))t={...t,venue:rule.venue};
-  return {ticket:t?withKey(t):null,retry:false};}
+  return {ticket:t?withKey(withPic(t,m)):null,retry:false};}
  // Gemini busy: show the rules' reading now, and read the mail again later; Gemini's reading then replaces it (same mail).
- if(process.env.GEMINI_API_KEY&&!last)return {ticket:rule?withKey(rule):null,retry:true};
- return {ticket:rule?withKey(rule):null,retry:false};}
+ if(process.env.GEMINI_API_KEY&&!last)return {ticket:rule?withKey(withPic(rule,m)):null,retry:true};
+ return {ticket:rule?withKey(withPic(rule,m)):null,retry:false};}
+// The event's picture from the mail, when it has one (lib/poster finds one elsewhere when it does not).
+const withPic=(t:Ticket,m:Message):Ticket=>{if(t.image)return t;const u=mailImage(m);return u?{...t,image:u}:t;};
 const norm=(s:string)=>s.toLowerCase().replace(/[^\w֐-׿]+/g,'');
 // Each file remembers its mail's date and order, so a newer replacement ticket for that order can take its place.
 export function withKey(t:Ticket):Ticket{return {...t,files:t.files.map(f=>({...f,at:f.at??t.mailed,...(t.order&&!f.order?{order:t.order}:{})})),key:t.order?'o:'+norm(t.order):'t:'+norm(t.title).slice(0,24)+':'+t.start.slice(0,10)};}

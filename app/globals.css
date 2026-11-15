@@ -425,3 +425,7 @@ button.nc-go{font-family:inherit;border:0;width:100%;cursor:pointer}
 .nc-go,.file,.primary{font-size:calc(16px*var(--fs))}.ghost{font-size:calc(15px*min(var(--fs),1.5))}
 /* Small links get a tap area of at least 24px. */
 .footnote a,.setNote a{display:inline-block;min-height:24px;padding:2px 0}
+/* The event's picture (poster, event page picture) behind its card: dark on the text side so the text keeps its contrast. */
+.card.pic,.nextCard.pic,.stub.pic{background-image:linear-gradient(to left,rgba(11,15,20,.97) 0%,rgba(11,15,20,.9) 50%,rgba(11,15,20,.55) 100%),var(--pic);background-size:cover;background-position:center}
+.stub.pic{background-image:linear-gradient(to bottom,rgba(11,15,20,.55) 0%,rgba(11,15,20,.92) 45%,rgba(11,15,20,.98) 100%),var(--pic)}
+.card.pic.past,.card.pic.cx{background-image:linear-gradient(to left,rgba(11,15,20,.98) 0%,rgba(11,15,20,.93) 55%,rgba(11,15,20,.75) 100%),var(--pic)}

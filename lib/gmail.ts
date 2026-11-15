@@ -33,6 +33,16 @@ export function bodyText(m:Message){let plain='',html='';
  const walk=(p?:Part)=>{if(!p)return;if(!p.filename){if(p.mimeType==='text/plain'&&!plain)plain=decode(p.body?.data);else if(p.mimeType==='text/html'&&!html)html=decode(p.body?.data);}p.parts?.forEach(walk);};walk(m.payload);
  const h=html?htmlText(html):'';return plain.trim().length>200||!h?plain.trim():h;}
 // Links in the mail that open the ticket on the seller's site ("לצפייה בכרטיס", "View tickets").
+// The event's picture in the mail itself (a banner or poster), when there is one: a large image that is not a logo, an icon or a tracking pixel.
+export function mailImage(m:Message):string|undefined{let html='';const walk=(p?:Part)=>{if(!p)return;if(p.mimeType==='text/html'&&!html)html=decode(p.body?.data);p.parts?.forEach(walk);};walk(m.payload);
+ let best:{url:string;score:number}|undefined;
+ for(const t of html.matchAll(/<img\b[^>]*>/gi)){const tag=t[0];const src=tag.match(/\bsrc=["'](https:\/\/[^"']+)["']/i)?.[1];if(!src)continue;
+  const w=Number(tag.match(/\bwidth=["']?(\d+)/i)?.[1]||tag.match(/width:\s*(\d+)px/i)?.[1]||0),h=Number(tag.match(/\bheight=["']?(\d+)/i)?.[1]||tag.match(/height:\s*(\d+)px/i)?.[1]||0);
+  const alt=(tag.match(/\balt=["']([^"']*)/i)?.[1]||'');
+  if(/logo|icon|pixel|spacer|track|open\.|beacon|facebook|instagram|twitter|whatsapp|youtube|tiktok|apple|google|play|store|badge|footer|header|signature|arrow|button|\.gif(\?|$)/i.test(src+' '+alt))continue;
+  if((w&&w<240)||(h&&h<120))continue;const score=(w||300)*(h||200)+(/poster|event|show|banner|upload|image|media|cdn/i.test(src)?50000:0);
+  if(!best||score>best.score)best={url:src.replace(/&amp;/g,'&'),score};}
+ return best?.url;}
 export function ticketLinks(m:Message){let html='';const walk=(p?:Part)=>{if(!p)return;if(p.mimeType==='text/html'&&!html)html=decode(p.body?.data);p.parts?.forEach(walk);};walk(m.payload);
  const out:{label:string;url:string;msg?:string}[]=[];for(const a of html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)){const label=htmlText(a[2]).replace(/\s+/g,' ').trim();
   if(/^https?:\/\//.test(a[1])&&label.length<40&&/כרטיס|ticket|הזמנה שלי|צפייה בהזמנה|view order|wallet|ארנק|ביטול|ניהול (?:ה)?הזמנה|cancel|manage|booking management/i.test(label)&&!/unsubscribe|הסר/i.test(label)&&!out.some(o=>o.url===a[1]))out.push({label,url:a[1].replace(/&amp;/g,'&'),msg:m.id});}
