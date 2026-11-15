@@ -61,8 +61,8 @@ const fileLabel=(f:TFile,i:number,n:number,k=1)=>/pkpass/i.test(f.type+f.name)?'
 // Long event names in parts: the name itself, and under it, small, a note - in brackets at the end, after a bar or an exclamation
 // ("(סרט טרום בכורה)", "| אנימיקס 2026", "!! POP/ANIME/FUNK"), or the version of a film ("-מדובב", "מתורגם", "3D").
 function Title({s}:{s:string}){let main=s.trim(),note='';
- const ver=main.match(/^(.+?)\s*[-–]?\s*((?:מדובב|מתורגם|דיבוב|כתוביות|גרסה מדובבת|3D|IMAX|4DX)(?:\s+(?:לעברית|עברית|באנגלית|אנגלית))?)\s*$/i);
- if(ver&&ver[1].length>=2){main=ver[1].replace(/\s*[-–]\s*$/,'');note=ver[2];}
+ const ver=main.match(/^(.+?)\s*[-–]?\s*((?:מדובב|מתורגם|דיבוב|כתוביות|גרסה מדובבת|3D|IMAX|4DX)(?:\s*\(?\s*(?:לעברית|עברית|באנגלית|אנגלית)\s*\)?)?)\s*$/i);
+ if(ver&&ver[1].length>=2){main=ver[1].replace(/\s*[-–]\s*$/,'');note=ver[2].replace(/\s*\(\s*([^)]+?)\s*\)/,' $1');}
  else{const p=main.match(/^(.+?)\s*\(([^()]{2,60})\)\s*$/)||main.match(/^(.{2,}?)\s*\|\s*(.{2,60})$/)||main.match(/^(.{4,}?[!?]+)\s+(.{3,80})$/);if(p){main=p[1];note=p[2];}}
  return <>{bidi(main)}{note&&<span className="tnote">{bidi(note)}</span>}</>;}
 // Events read before a fix are read again once: here, Smarticket mails whose name came out as the venue ("סינמטק שדרות").
